@@ -1,0 +1,388 @@
+---
+title-block-banner: true
+title: "Análisis del rendimiento del el test minimental después de tres intervenciones no farmacológicos"
+subtitle: "Cuaderno de análisis de datos"
+date: today
+date-format: full
+author: 
+  - name: "John Felipe Arias"
+    orcid: https://orcid.org/0000-0002-2248-5761
+    degrees:
+      - MsC
+    affiliation: 
+      - name: Universidad San Buenaventura 
+        department: Psicología
+keywords: 
+  - Test Minimental
+  - Rendimiento psicológico
+  - Intervenciones no famacológicas
+
+license: "CC BY"
+
+format:
+   html:
+    code-fold: false
+    embed-resources: true
+    toc: true
+    toc-depth: 2
+    toc-location: left
+    number-sections: true
+    theme: spacelab
+   
+   typst: 
+    toc: true
+    number-sections: true
+    colorlinks: true
+
+knitr:
+  opts_chunk: 
+    warning: false
+    message: false
+---
+
+# Introduccion
+
+Esta investigación llevó a cabo intervenciones no famacologicas para XXXX. Se realizó Tecnica de estimulación electrica trancraneal; minsdfulness, una tecnica basada en la meditación del aquí y el ahora; y una intervención donde se empleó la estimulación eléctrica y el mindfulness juntos.
+
+# Instalación de paquetes
+
+A continuación se instalan los paquetes necesarios para desarrollar el modelo estadístico.
+
+```{r}
+if (!require("brms")) install.packages("brms")
+if (!require("dplyr")) install.packages("dplyr")
+if (!require("ggalluvial")) install.packages("ggalluvial")
+if (!require("ggplot2")) install.packages("ggplot2")
+if (!require("glmmTMB")) install.packages("glmmTMB")
+if (!require("here")) install.packages("here")
+if (!require("performance")) install.packages("performance")
+if (!require("readxl")) install.packages("readxl")
+
+```
+
+# Cargar los datos
+
+En primer lugar, cargamos la tabla "Data/INT_Anxiety_minimental.xlsx" que contiene los resultados del test minimental y otras variables de identificacióin. 
+
+```{r}
+
+tdcs_mmse_anxiety <- read_xlsx (here("Data/INT_Anxiety_minimental.xlsx"))
+head(tdcs_mmse_anxiety)
+
+```
+
+A continuación exploramos la estructura de los datos
+
+```{r}
+str(tdcs_mmse_anxiety)
+```
+De esta tabla estamos interesados en las variables "Medicion", que indica la semanas en las que se llevó a cabo la reccolleción de datos de la prueba. "Intervencion", una variable de agrupación que indica el grupo o tratamiento que recibió cada perticipante. "DS_Edad" nos indica la edad en años del participante y "DS_Sexo" nos indica el sexo biológico del pparticipante. Finalnmente, tomamos "MMSE_Total" como la variable que nos indica el resultado final del test. 
+
+En primer lugar, debemos transformar las variables "Intervención" y "Sexo" en categorías. El resto de variables las consideraremos como numéricas. 
+
+```{r}
+tdcs_mmse_anxiety <- tdcs_mmse_anxiety %>%
+  mutate(
+    Intervencion = factor(Intervencion, levels = c("Mindfulness", "Tdcs","combinado")),
+    DS_Sexo = factor(DS_Sexo, levels = c("H", "M"))
+  )
+
+str(tdcs_mmse_anxiety)
+```
+Confirmamos que los factores han sido ajustados correctamente. 
+
+
+# Visualización exploratoria de los datos 
+
+En primer lugar, implementamos un grupo de funciones estéticas para mejorar la apariencia de nuestros plots. 
+
+
+```{r}
+Plot_theme <- theme_classic() +
+  theme(
+      plot.title = element_text(size=18, hjust = 0.5, face="bold"),
+      plot.subtitle = element_text(size = 10, color = "black"),
+      plot.caption = element_text(size = 12, color = "black"),
+      axis.line = element_line(colour = "black", linewidth = 1.5, linetype = "solid"),
+      axis.ticks.length=unit(7,"pt"),
+     
+      axis.title.x = element_text(colour = "black", size = 16),
+      axis.text.x = element_text(colour = "black", size = 16, angle = 0, hjust = 0.5),
+      axis.ticks.x = element_line(colour = "black", linewidth = 1),
+      
+      axis.title.y = element_text(colour = "black", size = 16),
+      axis.text.y = element_text(colour = "black", size = 16),
+      axis.ticks.y = element_line(colour = "black", linewidth = 1),
+      
+      legend.position="right",
+      legend.direction="vertical",
+      legend.title = element_text(colour="black", face="bold", size=12),
+      legend.text = element_text(colour="black", size=10),
+      
+      plot.margin = margin(t = 10,  # Top margin
+                             r = 2,  # Right margin
+                             b = 10,  # Bottom margin
+                             l = 10) # Left margin
+      ) 
+```
+
+
+Ahora, visualizamos la distribución de los datos por medición, intervención y sexo. 
+
+```{r}
+#| label: fig-MMSE_Expl
+#| include: true
+#| warning: false
+#| message: false
+#| fig-cap: Evolucicion del Score del minimental por sexo
+#| fig-height: 4
+#| fig-width: 4
+
+
+MMSE_Total_Expl <- ggplot(
+tdcs_mmse_anxiety,
+  aes(
+    x = Medicion,
+    y = `MMSE_total`,
+    color = Intervencion
+  )
+) +
+  geom_point(position = position_jitter(width = 0.1)) +
+  labs(y = "Score total")+
+  ggtitle("Evolucicion del Score del minimental por sexo")+
+  Plot_theme +
+  theme(legend.position = "bottom",
+        legend.direction = "horizontal") +
+  facet_wrap(~ DS_Sexo)
+
+
+ggsave(MMSE_Total_Expl,
+       filename = here("Plots/MMSE_ScoreTotal.png"),
+       width    = 12, 
+       height   = 12, 
+       units    = "cm")
+
+MMSE_Total_Expl
+```
+@fig-MMSE_Expl nos muestra que el escore parece aumentar con el transcurso del tiempo para todas las intervenciones. No se aprecia una sustancial entre hombres y muejres. Consideraremos el tiempo, la intervención, y el sexo en nuestra regresión, y veremos además si la edad tiene un efecto relevante. 
+
+
+# Modelamiento estadístico - Efecto de la intervención y la medición (Modelo 1).
+En pimer lugar, utilizamos una distribución de student para ajustar el siguiente modelo
+
+$$
+MMSE\_total_i = \beta_0 + \beta_1 \times Medicion_i + \beta_2 \times Intervencion_i + \beta_3 \times (Medicion_i \times Intervencion_i) + \epsilon_i
+$$
+donde $\beta_0$ es el intercepto, que representa el puntaje base de la medicion (0) y la intervención (mindfullness).$\beta_1$ es el efecto de la medición (tiempo). $\beta_2$ son los coefficientes que representan el efecto de cada intervención y $\beta_3$ es la interacción entre la medición y la intervención. Finalmente, $\epsilon_i$ representa el error que sigue una distribución student-t
+
+## Ajuste del modelo
+
+
+```{r}
+MMSE_Mdl1 <- bf(MMSE_total ~ Medicion * Intervencion)
+
+get_prior(MMSE_Mdl1, tdcs_mmse_anxiety)
+
+MMSE_Fit1 <-
+  brm(
+    data = tdcs_mmse_anxiety,
+    family = student,
+    formula = MMSE_Mdl1,
+    chains = 4,
+    cores = 4,
+    warmup = 2500,
+    iter = 5000,
+    seed = 8807,
+    control = list(adapt_delta = 0.99, max_treedepth = 15),
+    file = here("Models/MMSE_Fit1.rds"),
+    file_refit = "never"
+  )
+```
+
+A continuación vemos la tabla de resultados:
+
+## Tabla de resultados
+
+```{r}
+summary(MMSE_Fit1)
+```
+Los resultados indican que la medición base para mindfullnes es 10.38 (95% CI = 8.96 to 11.79). El tiempo (medición) indica que el score mejora en 1.45 (95% CI 0.94 - 1.98) para el grupo mindfullnes por cada semana que pasa. Por otra parte, el coeffiente para "IntervencionTdcs" nos dice que el score base para el grupo tDCS es en promedio un poco más alto que para mindfullness (0.81), aunque posee una considerable incertidumbre (95% cI = -1.16 - 2.84). Esto nos indca que el puntaje base para este grupo puede ser menor, igual o superior que el del grupo mindfullness. El grupo combinado, por su parte, tiene una medición base menor que el grupo mindfulness (−1.75, 95% cI = -3.88 - 0.42), nuevamente con una considerable incertidumbre. 
+
+Por otra parte, los coeficientes de interacción nos indican que, en primer lugar (Medicion:IntervencionTdcs), el grupo tDCS muestra un incremento adicional de 1.08 en los scores del MMSE con el tiempo comparado con el grupo mindfullness. el intervalo de credibilidad permite concluir que el efecto es probablemente positivo (95 CI = 0.35 - 1.81). Para el grupo combinado (Medicion:Intervencioncombinado), podemos apreciar un incremento adicional de 1.65 points en los scores del MMSE con el tiempo relativo al grupo mindfulness. Del mismo modo, el intervalo de credibilidad sugiere que el efecto es positivo (0.89 - 2.44). 
+
+## Visualización de resultados
+
+A continuación visualizamos los resultados:
+
+```{r}
+#| label: fig-MMSE_Fit1
+#| include: true
+#| warning: false
+#| message: false
+#| fig-cap: Evolucicion del Score del minimental por sexo
+#| fig-height: 4
+#| fig-width: 4
+
+MMSE_CE <- conditional_effects(MMSE_Fit1) 
+
+MMSE_CE_Fig <- plot(MMSE_CE , plot = FALSE)[[3]]
+
+MMSE_CE_Fig <- MMSE_CE_Fig +
+  labs(title = "Evolución del score del MMSE",
+       y = "MMSE score total",
+       x = "Medición") +
+  Plot_theme +
+  theme(legend.position = "bottom",
+        legend.direction = "horizontal")
+
+ggsave (MMSE_CE_Fig,
+        file = here("Plots/MMSE_Fit1.jpg"),
+        width = 12,
+        height = 12,
+        units = "cm")
+
+MMSE_CE_Fig
+```
+@fig-MMSE_Fit1 nos muestra que los tratamientos por Tdcs y mendifullnes tienen pendientes más positivas, lo que indica un incremento más rápido en el score del test con el tiempo. 
+
+A pesar de que la exploración inicial de los datos sugiere que no existe una diferencia por sexo, incluiremos esta variable dentro de la regresión para propósitos educativos.
+
+# Modelamiento estadístico - Efecto del sexo (Modelo 2).
+
+Ahora ajustamos un modelo con la siguiente formulacion:
+
+$$
+μ_i = β_0 + β_1 * Medicion_i + β_2 * Intervencion_tDCS_i + β_3 * Intervencion_combinado_i 
+     + β_4 * DS_Sexo_i + β_5 * (Medicion_i * Intervencion_tDCS_i) 
+     + β_6 *
+$$
+Esta notación toma la misma forma que la anterior pero incluye el sexo (variable sin interacción)
+
+```{r}
+MMSE_Mdl2 <- bf(MMSE_total ~ Medicion * Intervencion + DS_Sexo)
+
+get_prior(MMSE_Mdl2, tdcs_mmse_anxiety)
+
+MMSE_Fit2 <-
+  brm(
+    data = tdcs_mmse_anxiety,
+    family = student,
+    formula = MMSE_Mdl2,
+    chains = 4,
+    cores = 4,
+    warmup = 2500,
+    iter = 5000,
+    seed = 8807,
+    control = list(adapt_delta = 0.99, max_treedepth = 15),
+    file = here("Models/MMSE_Fit2.rds"),
+    file_refit = "never"
+  )
+```
+A continuación vemos la tabla de resultados:
+
+## Tabla de resultados
+
+```{r}
+summary(MMSE_Fit2)
+```
+Los resultados sugieren que el sexo no tiene un efecto sustancial el el puntaje del MMSE con el tiempo y la intervención (-0.50, 95% cI = -1.26 - 0.28).
+
+## Visualizacion
+
+Podemos apreciar el resultado de manrea visual:
+
+```{r}
+#| label: fig-MMSE_Fit2
+#| include: true
+#| warning: false
+#| message: false
+#| fig-cap: Evolucicion del Score del minimental por sexo
+#| fig-height: 4
+#| fig-width: 4
+
+MMSE_Fit2_CE <- conditional_effects(MMSE_Fit2) 
+
+MMSE_Fit2_CE_Fig <- plot(MMSE_Fit2_CE , plot = FALSE)[[3]]
+
+MMSE_Fit2_CE_Fig <- MMSE_Fit2_CE_Fig +
+  labs(title = "Evolución del score del MMSE",
+       y = "MMSE score total",
+       x = "Sexo") +
+  Plot_theme
+
+
+ggsave (MMSE_Fit2_CE_Fig,
+        file = here("Plots/MMSE_Fit2.jpg"),
+        width = 12,
+        height = 12,
+        units = "cm")
+
+MMSE_Fit2_CE_Fig
+```
+
+
+# Modelamiento estadístico - Efecto de la edad (Modelo 3).
+
+Finalmente, investigamos el efecto de la edad el la evolución del puntaje del test. 
+
+```{r}
+MMSE_Mdl3 <- bf(MMSE_total ~ Medicion * Intervencion + DS_Edad)
+
+get_prior(MMSE_Mdl3, tdcs_mmse_anxiety)
+
+MMSE_Fit3 <-
+  brm(
+    data = tdcs_mmse_anxiety,
+    family = student,
+    formula = MMSE_Mdl3,
+    chains = 4,
+    cores = 4,
+    warmup = 2500,
+    iter = 5000,
+    seed = 8807,
+    control = list(adapt_delta = 0.99, max_treedepth = 15),
+    file = here("Models/MMSE_Fit3.rds"),
+    file_refit = "never"
+  )
+```
+A continuación vemos la tabla de resultados:
+
+## Tabla de resultados
+
+```{r}
+summary(MMSE_Fit3)
+```
+Al igual que la anterior variable, los resultados indican que la edad no tiene un efecto sustancial en el puntaje del MMSE.
+
+## Visualizacion
+
+Podemos apreciar el resultado de manrea visual:
+
+```{r}
+#| label: fig-MMSE_Fit3
+#| include: true
+#| warning: false
+#| message: false
+#| fig-cap: Evolucicion del Score del minimental por edad
+#| fig-height: 4
+#| fig-width: 4
+
+MMSE_Fit3_CE <- conditional_effects(MMSE_Fit3) 
+
+MMSE_Fit3_CE_Fig <- plot(MMSE_Fit3_CE , plot = FALSE)[[3]]
+
+MMSE_Fit3_CE_Fig <- MMSE_Fit3_CE_Fig +
+  labs(title = "Evolución del score del MMSE",
+       y = "MMSE score total",
+       x = "Edad") +
+  Plot_theme
+
+
+ggsave (MMSE_Fit3_CE_Fig,
+        file = here("Plots/MMSE_Fit3.jpg"),
+        width = 12,
+        height = 12,
+        units = "cm")
+
+MMSE_Fit3_CE_Fig
+```

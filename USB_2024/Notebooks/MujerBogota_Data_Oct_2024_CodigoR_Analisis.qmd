@@ -1,0 +1,150 @@
+---
+title: "Proyecto Simulacion premisa principal Mujer Bogota Oct_2024"
+author: "Denise Bernardo Ferreira"
+format: html
+editor: visual
+---
+
+Analisis de datos de la premisa principal del modelo de estructura emocional de la mujer joven adulta universitaria bogotana como ejemplo.
+
+ANALISIS DE REGRESION LOGISTICA ORDENADA
+
+La regresión logística ordinal permite analizar y modelar la relación entre una variable dependiente ordinal y dos o más variables independientes . La regresión logística ordinal asume una relación de orden estricta, Io cual no necesariamente se cumple en la variable ARQUETIPO.
+
+Se instalan y cargan librerías que permiten trabajar con modelos de regresión logística ordinal y multinomial:
+
+```{r}
+install.packages("readxl")  # Leer datos de Excel
+install.packages("ggplot2") # Gráficos (opcional)
+install.packages("MASS")    # Modelos de regresión logística ordinal
+install.packages("nnet")    # Modelos de regresión logística multinomial
+install.packages("sjPlot")  # Visualización de modelos
+
+```
+
+```{r}
+# Cargar las librerías
+library(readxl)
+library(ggplot2)
+library(MASS)
+library(nnet)
+library(sjPlot)
+```
+
+Leer el archivo excel que contiene los datos
+
+
+```{r}
+install.packages("openxlsx")
+library(openxlsx)
+```
+
+Este comando carga el archivo en un objeto llamado `datos`.
+
+```{r}
+library(here)
+
+# Leer archivo excel
+datos <- read.xlsx (here("Data/MujerBogata_Data_Oct_2024.xlsx"))
+```
+
+Converte las variables en los formatos correctos para el análisis. Asegurar que R interprete las variables correctamente.
+
+-   **ARQUETIPO:** Convertida en un factor ordenado (TRUE)
+
+-   **APEGO y CRIANZA:** Convertidas en factores
+
+```{r}
+
+# Convertir la variable ARQUETIPO en factor ordenado (ordinal) 
+
+datos$ARQUETIPO <- factor(datos$ARQUETIPO, ordered = TRUE)
+
+# Convertir APEGO y CRIANZA en factores (si aún no Io has hecho) 
+
+datos$APEGO <- as.factor(datos$APEGO)
+datos$CRIANZA <- as.factor(datos$CRIANZA)
+```
+
+Se utiliza la función `polr()` para realizar la regresion logistica ordinal, las variables:**ARQUETIPO:** Variable dependiente ordinal, **APEGO y CRIANZA:** Variables independientes. El argumento `Hess = TRUE` permite calcular errores estándar.
+
+```{r}
+
+# Modelo logístico ordinal
+modelo_logistico <- polr(ARQUETIPO ~ APEGO + CRIANZA, data = datos, Hess = TRUE)
+
+# Mostrar el resumen del modelo
+summary(modelo_logistico)
+```
+
+Análisis de regresión logística ¿Porque la analisis de regresion logistica multinomial?
+
+Modelo más flexibles que captura mejor las relaciones entre las variables, en casos de categorías nominales. Si considera que la variable dependiente ARQUETIPO tiene las tres categorías sin un orden inherente. Asi que, la regresión logística multinomial parece ser el enfoque más adecuado para este análisis, pues permite mayor flexibilidad y precisión en la estimación de las probabilidades de cada categoría de ARQUETIPO.
+
+Converte las variables en los formatos correctos para el análisis. Asegurar que R interprete las variables correctamente.
+
+-   **ARQUETIPO:** Convertida en un factor nominal sin orden
+
+-   **APEGO y CRIANZA:** Convertidas en factores
+
+```{r}
+# Convierte ARQUETIPO en un factor nominal (sin orden)
+datos$ARQUETIPO <- factor(datos$ARQUETIPO, ordered = FALSE)
+
+# Convertir APEGO y CRIANZA en factores
+datos$APEGO <- as.factor(datos$APEGO)
+datos$CRIANZA <- as.factor(datos$CRIANZA)
+
+
+```
+
+La variable independiente **ARQUETIPO** no tiene un orden inherente, ahora su caracteristica es nominal sin orden, usamos el modelo de la regresión logística multinomial con ARQUETIPO como variable dependiente, y APEGO y CRIANZA como variables independientes.
+
+```{r}
+# usamos la regresión logística multinomial
+modelo_multinomial <- multinom(ARQUETIPO ~ APEGO + CRIANZA, data = datos)
+
+
+```
+
+El summary, muestra los coeficientes de cómo cambian las probabilidades relativas de estar en una categoría específica de **ARQUETIPO**. Los **Errores estándar:** Indican la precisión de los coeficientes.
+
+```{r}
+# Ver el resumen del modelo para interpretar los resultados
+summary(modelo_multinomial)
+
+```
+
+Se utiliza la función s predict, para calcular las probabilidades de pertenecer a cada una de las categorías del **ARQUETIPO** (bajo, medio o alto apego al arquetipo) , dadas las combinaciones específicas de valores en APEGO y CRIANZA.
+
+```{r}
+# Calcular las probabilidades predichas para el modelo multinomial
+probabilidades_predichas <- predict(modelo_multinomial, type = "probs")
+
+# Mostrar las primeras filas de las probabilidades predichas
+head(probabilidades_predichas)
+
+```
+
+Usamos la función `plot_model()` del paquete `sjPlot` para graficar las probabilidades predichas. Generar gráfico que muestra cómo cambian las probabilidades de pertenecer a cada nivel de **ARQUETIPO** según los valores de **APEGO** y **CRIANZA**. Para asegura que el modelo está disponible y correctamente ajustado para que plot_model() funcione, utilizamos summary(modelo_multinomial)
+
+```{r}
+# Graficar las probabilidades predichas para cada nivel de ARQUETIPO
+summary(modelo_multinomial)
+plot_model(modelo_multinomial, type = "pred", terms = c("APEGO", "CRIANZA"))
+
+```
+
+Los elementos graficos, ayudan a entender cómo cambian las probabilidades de cada categoría según las combinaciones de APEGO y CRIANZA.
+
+Eje horizontal (APEGO): Representa las diferentes categorías de apego ( 1-seguro, 2-ansioso, 3-evitativo, 4-desorganizado). Cada número corresponde a un tipo de apego.
+
+Eje vertical (ARQUETIPO): Representa la probabilidad de pertenecer a cada nivel de apego al modelo arquetípico ( 1-bajo, 2-medio o 3-alto).
+
+(CRIANZA): Los puntos coloridos representan los diferentes estilos de crianza (1-autoritario, 2-permisivo, 3-negligente, 4-democrático).
+
+Este gráfico respalda la hipótesis principal de que:
+
+-   Un apego diferente de seguro y un estilo de crianza diferente de democrático están relacionados con un mayor apego al modelo arquetípico.
+
+-   Los estilos de crianza democrático (4) parece estar asociado con menor probabilidad de alto apego al modelo arquetípico.

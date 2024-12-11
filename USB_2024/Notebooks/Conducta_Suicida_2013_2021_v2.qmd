@@ -1,0 +1,474 @@
+---
+title-block-banner: true
+title: "Análisis del comportamiento suicida en el departamento del Tolima (2013 - 2021)"
+subtitle: "Cuaderno de análisis de datos"
+date: today
+date-format: full
+author: 
+  - name: "Carolina Ortiz López"
+    orcid: XXXX
+    degrees:
+      - MsC
+    affiliation: 
+      - name: Universidad San Buenaventura 
+        department: Psicología
+keywords: 
+  - Suicidio
+  - Políticas públicas de salud mental
+  - Departamente del Tolima
+
+license: "CC BY"
+
+format:
+   html:
+    code-fold: false
+    embed-resources: true
+    toc: true
+    toc-depth: 2
+    toc-location: left
+    number-sections: true
+    theme: spacelab
+   
+   typst: 
+    toc: true
+    number-sections: true
+    colorlinks: true
+
+knitr:
+  opts_chunk: 
+    warning: false
+    message: false
+---
+
+# Instalación y cargar de paquetes
+
+```{r}
+if (!require("brms")) install.packages("brms")
+if (!require("dplyr")) install.packages("dplyr")
+if (!require("ggalluvial")) install.packages("ggalluvial")
+if (!require("ggplot2")) install.packages("ggplot2")
+if (!require("glmmTMB")) install.packages("glmmTMB")
+if (!require("here")) install.packages("here")
+if (!require("htmlwidgets")) install.packages("htmlwidgets")
+if (!require("leaflet")) install.packages("leaflet")
+if (!require("performance")) install.packages("performance")
+if (!require("readxl")) install.packages("readxl")
+if (!require("tidyverse")) install.packages("tidyverse")
+```
+
+# Cargar los datos
+
+A continuación cargaremos los datos recopilados desde el archivo "Data/Cond_Suicida_2013_2021" que contiene información de marcadores de la Casos_Suicidio y Casos_Intento del departamento del Tolima para el periodo 2013 - 2021.
+
+```{r}
+data <- read_xlsx (here("Data/Cond_Suicida_2013_2021.xlsx"))
+head(data)
+```
+
+Vamos a analizar el comportamiento suicida en hombres y mujeres. En primero lugar, debemos reestructurar la tabla sustancialmente.
+
+# Reestrcturación de los datos:
+
+Vamos a seleccionar las columnas relevantes y a generar una tabla larga para hombres y mujeres teneindo en cuanto los intesntos y los suicidios completados. 
+
+```{r}
+library(tidyr)
+
+# Reshape the data to long format for counts
+data_long <- data %>%
+  select(Municipio, Suicidio_Hombres, Suicidio_Mujeres, Intento_Hombres, Intento_Mujeres) %>%
+  pivot_longer(
+    cols = starts_with("Suicidio_"),
+    names_to = "Sexo",
+    names_prefix = "Suicidio_",
+    values_to = "Completados"
+  ) %>%
+  left_join(
+    data %>%
+      select(Municipio, Intento_Hombres, Intento_Mujeres) %>%
+      pivot_longer(
+        cols = starts_with("Intento_"),
+        names_to = "Sexo",
+        names_prefix = "Intento_",
+        values_to = "Intentos"
+      ),
+    by = c("Municipio", "Sexo")
+  )
+
+str(data_long)
+```
+Podemos apreciar que generamos nuevas columnas denominadas "Sexo", "Completados" e "Intentos". Con la tabla transformada podemos realizar el modelamiento estadístico. Dejaremos la visualización de los datos (gráficos) para después. Estamos intersados en modelar la distribución de los suicidios entre hombres y mujeres, condicionando en los intentos. 
+
+# Modelamiento estadístico
+
+## Transformar los datos
+
+Para modelar adecuadamente estas variables, los casos e intentos de suciidios deben ser intregres (numeros completos, no fracciones).
+
+```{r}
+data_long$Completados <- as.integer(data_long$Completados)
+data_long$Intentos <- as.integer(data_long$Intentos) 
+
+str(data_long)
+```
+Podemos apreciar que "Completados" e "Intentos" son ahora integrers. 
+
+## Ajuste del modelo
+
+Para este caso ajustaremos un modelo binomial, donde los suicidios son los casos (completados, succed) de intentos de sucicidio. Utilizaremos una distribnucion binominal con una función link "logit" para estimar las probabilidades (log-odds) de que los intentos de suicidio terminen en suicidio en función del sexo. La regresión toma la siguiente notación:
+
+$$
+\log\left(\frac{p}{1-p}\right) = \beta_0 + \beta_1 \times \text{Sexo}
+$$
+
+Donde $P$ es la probabilidad de completar el suicidio dado un intento. $\beta_0$ es la probabilidad (log-oods) de completar el suicio para los hombres (la categoría de referencia); y $\beta_1$ representa el cambio de probabilidad (log-odds) de completar el suicidio para las mujeres en relación con los hombres.
+
+```{r}
+Suicidios_Mdl1 <- bf(Completados | trials(Intentos) ~ Sexo)
+
+get_prior(Suicidios_Mdl1, data_long, family = binomial)
+
+Suicidios_Fit1 <-
+  brm(
+    data = data_long,
+    family = binomial,
+    formula = Suicidios_Mdl1,
+    chains = 4,
+    cores = 4,
+    warmup = 2500,
+    iter = 5000,
+    seed = 8807,
+    control = list(adapt_delta = 0.99, max_treedepth = 15),
+    file = here("Models/Suicidio_Completados_Fit1.rds"),
+    file_refit = "never"
+    )
+```
+
+## Visualización de resultados
+
+A continuación visualizamos la tabla de resultados:
+
+```{r}
+summary(Suicidios_Fit1)
+```
+Los resultados indican que los hombres poseen una probabilidad (log-odds) de -0.97 de completar el suicidio. Parta las mujeres esta probabilidad es 2.03 veces menor. Realizaremos una estimación más directa de las probabilidades. 
+
+Dado que los hombres
+
+$$
+\text{logit}(p_{\text{men}}) = -0.97
+$$
+podemos calcular que la probabilidad de completar un suicidio es:
+
+$$
+p_{\text{men}} = \frac{e^{-0.97}}{1 + e^{-0.97}} \approx \frac{0.379}{1 + 0.379} \approx 0.2747
+$$
+Esto quiere decir que el 27.5% de los hombres en el departamento del tolima culminan sus intentos de suicidio 
+
+$$
+\text{Odds}_{\text{women}} = e^{\text{logit}(p_{\text{women}})} = e^{-3.00} \approx 0.0498
+$$
+Por el contrario los log-oods para las mujeres es:
+
+$$
+\text{logit}(p_{\text{women}}) = -0.97 + (-2.03) = -3.00
+$$
+Lo que indica una probabilidad de 
+
+$$
+p_{\text{women}} = \frac{e^{-3.00}}{1 + e^{-3.00}} \approx \frac{0.0498}{1 + 0.0498} \approx 0.0474
+$$
+Esto quiere decir que aproximadamente un 4% de las mujeres completan sus intentos de suicidio.
+
+Ahora bien, si comparamos el odds ratio de las mujeres y hombres
+
+$$
+\text{OR} = e^{-2.03} \approx 0.1315
+$$
+obtenemos que las muejres tienen aproximadamente 0.13 veces probabilidad (odds) de completar el sucidio que los hombres. Alternativamente se puede decir que (1/0.1315 = 7.6) los hombre tienen una probabilidad 7.6 veces mayor de completar suicidios que las mujeres.
+
+# Visualización de los resultados
+
+Ahora veremos gráficamente estas estimaciones utilizando conditional effects
+
+```{r}
+#| label: fig-Suicidios_CE
+#| include: true
+#| warning: false
+#| message: false
+#| fig-cap: Effecto del sexo en la consumación de intentos de suicidio
+#| fig-height: 4
+#| fig-width: 6
+
+
+Suicidios_CE <- conditional_effects(Suicidios_Fit1) 
+
+Suicidios_CE_Fig <- plot(Suicidios_CE, plot = FALSE)[[1]]
+
+Suicidios_CE_Fig <- Suicidios_CE_Fig +
+  labs(title = "Effecto del sexo en la consumación de intentos de suicidio",
+       y = "Probabilidad de suicidio dados los intentos",
+       x = "Sexo")+
+  theme_classic()
+
+
+ggsave (Suicidios_CE_Fig ,
+        file = here("Plots/Suicidio_Sexo.jpg"),
+        width = 15,
+        height = 10,
+        units = "cm")
+
+
+Suicidios_CE_Fig 
+
+```
+
+# Visualización por municipio
+
+En esta sección tomaremos los resultados pare realizar una visualización pór municipio utilizando los paquetes "rnaturalearth" y "rnaturalearthdata".
+
+## Instalar y cragar los paquetes
+
+```{r}
+if (!require("rnaturalearth")) install.packages("rnaturalearth")
+if (!require("rnaturalearthdata")) install.packages("rnaturalearthdata")
+if (!require("sf")) install.packages("sf")
+if (!require("viridis")) install.packages("viridis")
+
+if (!require("devtools")) install.packages("devtools")
+library(devtools)
+devtools::install_github("ropensci/rnaturalearthhires")
+```
+
+## Crear coodenadas de los municipios
+
+Ahora, adjuntamos las coordenadas de los municipios al data frame con el que hemos estado trabajando.
+
+```{r}
+
+# Creamos un data frame con las coordenadas de los municipios.
+coordinates <- data.frame(
+  Municipio = c("Cajamarca", "Alpujarra", "Santa Isabel", "Rovira", "Icononzo", "Falan", 
+                "Carmen de Apicalá", "Alvarado", "Murillo", "Villarrica", "San Antonio", 
+                "Palocabildo", "Roncesvalles", "Honda", "Herveo", "Mariquita", "Libano", 
+                "Melgar", "Cunday", "Fresno", "Venadillo", "Suárez", "Armero Guayabal", 
+                "Ambalema", "Ibagué", "Chaparral", "Espinal", "Lérida", "Coyaima", "Ataco", 
+                "Planadas", "Anzóategui", "Dolores", "Guamo", "Purificación", "Coello", 
+                "Ortega", "San Luis", "Rioblanco", "Natagaima", "Valle de San Juan", "Piedras", 
+                "Casabianca", "Villahermosa", "Saldaña", "Prado", "Flandes"),
+  Latitude = c(4.4423, 3.417, 4.713, 4.239, 4.183, 5.083, 4.073, 4.567, 4.874, 3.933, 
+               3.920, 5.118, 4.016, 5.208, 5.084, 5.198, 4.921, 4.204, 4.061, 5.152, 
+               4.690, 4.047, 5.031, 4.782, 4.4389, 3.723, 4.150, 4.861, 3.833, 3.590, 
+               3.200, 4.630, 3.533, 4.030, 3.858, 4.283, 3.938, 5.203, 3.521, 3.622, 
+               4.288, 4.498, 5.081, 5.030, 3.930, 3.755, 4.289),
+  Longitude = c(-75.4287, -74.917, -75.097, -75.247, -74.533, -74.960, -74.720, -74.950, 
+                -75.170, -74.600, -75.467, -75.029, -75.607, -74.735, -75.170, -74.891, 
+                -75.063, -74.640, -74.693, -75.035, -74.934, -74.831, -74.891, -74.764, 
+                -75.2322, -75.483, -74.880, -74.910, -75.083, -75.501, -75.643, -75.102, 
+                -74.733, -74.970, -74.933, -74.933, -75.220, -74.923, -75.463, -75.094, 
+                -75.114, -74.875, -75.124, -75.120, -75.020, -74.927, -74.817)
+)
+
+# Juntamos los das datasets
+data_long <- left_join(data_long, coordinates, by = "Municipio")
+
+```
+
+## Visualizar mapa del Tolima
+
+Ahora utilizamos los paquetes de geolocalización para ver el mapa del departamento del Tolima con los municipios del del data frame.
+
+```{r}
+
+library(ggplot2)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(sf)
+library(dplyr)
+library(readxl)
+
+# Descargamos los mapas de Colombia
+colombia_map <- ne_countries(scale = "medium", country = "Colombia", returnclass = "sf")
+col_departments <- ne_states(country = "Colombia", returnclass = "sf")
+
+# Filtramos en la base de datos de mapas al departamento del tomila
+tolima_map <- col_departments %>% filter(name == "Tolima")
+
+# Creamos el mapa de las ciudades
+ggplot(data = tolima_map) +
+  geom_sf(fill = "lightblue", color = "black") + 
+  geom_point(data = data_long, aes(x = Longitude, y = Latitude), color = "black", size = 3) + # Plot cities
+  labs(title = "Ciudades en el Departamento del Tolima, Colombia", x = "Longitud", y = "Latitud") +
+  coord_sf(xlim = c(-76, -74), ylim = c(3, 6))  +
+  theme_classic()
+```
+Ahora, verificamos que nuestros datos y el mapa del tolima usan las mismas coordenadas de referencia (CRS). Esto es crucial para las operaciones espaciales que relizaremos.
+
+```{r}
+
+st_crs(tolima_map)
+
+```
+## Convertir las coodenadas del dataset
+
+Ahora, convertimos nuestrso datos en un objeto `sf`, especificando las coordenadas y el CRS.
+
+```{r}
+
+data_long_sf <- st_as_sf(
+  data_long,
+  coords = c("Longitude", "Latitude"),
+  crs = 4326,  # Mantemos lel sistema de referencia WGS84 
+  remove = FALSE  
+)
+```
+
+Con el siguiente código, nos aseguramos que nuestros datos y el mapa tengan las mismas coordenadas:
+
+```{r}
+
+st_crs(data_long_sf)
+
+# Si las coordenas son diferentes, se homogenizan
+if (st_crs(data_long_sf) != st_crs(tolima_map)) {
+  data_long_sf <- st_transform(data_long_sf, crs = st_crs(tolima_map))
+}
+
+```
+
+## Visualizar el número de suicidios e intentos
+
+Ahora, utilizamos ggplot para visualizar el número de sucidios por municipio en el Departamento del Tolima. 
+
+```{r}
+#| label: fig-Suicidios_Municipio
+#| include: true
+#| warning: false
+#| message: false
+#| fig-cap: Suicidios de hombres y mujeres en el Departamento del Tolima
+#| fig-height: 10
+#| fig-width: 12
+
+
+# Creamos el mapa mase de Tolima
+base_map <- ggplot() +
+  geom_sf(data = tolima_map, fill = "gray90", color = "black")
+
+# Adjuntamos puntos como probabilidades
+Suicide_map <- base_map +
+  geom_sf(
+    data = data_long_sf,
+    aes(geometry = geometry, 
+        color = Intentos,
+        size = Completados),
+    
+  ) +
+  scale_color_viridis_c(option = "plasma",
+                        limits = c(0, 200)) +
+  
+  scale_size(limits = c(0, 50)) +
+  
+  theme_minimal() +
+  theme(legend.position = "bottom") +
+  
+  labs(
+    title = "Suicidios cosnumados en el Departamento del Tolima",
+    color = "Intentos"
+  ) +
+  
+    geom_text(
+    data = data_long_sf,
+    aes(x = Longitude, y = Latitude, label = Municipio),
+    size = 4, color = "black", nudge_y = 0.05
+  ) +
+  
+  facet_wrap(~ Sexo)
+
+ggsave (Suicide_map,
+        file = here("Plots/Suicidio_Ciudad.jpg"),
+        width = 24,
+        height = 20,
+        units = "cm")
+
+Suicide_map
+
+```
+@fig-Suicidios_Municipio nos muestra el numero de suicdios consumados con el tamaño de los puntos y los intentos con código de color.
+
+## Mapa interactivo
+
+Podemos también utilizar el paquete `leaflet` para hacer un mapa interactivo. En primer lugar, creamos un mapa centrado en el departamento del Tolima.
+
+```{r}
+
+map <- leaflet() %>%
+  addTiles() %>%  # Add default OpenStreetMap tiles
+  setView(lng = mean(data_long_sf$Longitude), lat = mean(data_long_sf$Latitude), zoom = 8)
+
+```
+
+A continuación, utilizamos el mapa para gragar capas y visualizar la distribución de intentos y suicidios en canda uno de los municipios del departamento del Tolima. 
+
+```{r}
+# Create color palette
+pal <- colorNumeric(
+  palette = "Plasma",
+  domain = data_long_sf$Intentos
+)
+
+# Separate data by Sexo
+data_hombres <- data_long_sf %>% filter(Sexo == "Hombres")
+data_mujeres <- data_long_sf %>% filter(Sexo == "Mujeres")
+
+# Adicionamos las capas
+Suicidio_Mapa <- leaflet() %>%
+  addTiles() %>%
+  setView(lng = mean(data_long_sf$Longitude), lat = mean(data_long_sf$Latitude), zoom = 8) %>%
+  addPolygons(
+    data = tolima_map,
+    fillColor = "transparent",
+    color = "blue",
+    weight = 2,
+    opacity = 1,
+    group = "Tolima Boundary"
+  ) %>%
+  addCircleMarkers(
+    data = data_hombres,
+    lng = ~Longitude,
+    lat = ~Latitude,
+    radius = ~sqrt(Completados) * 2,
+    stroke = TRUE,
+    fillOpacity = 0.7,
+    popup = ~paste0(
+      "<strong>Municipio: </strong>", Municipio, "<br>",
+      "<strong>Sexo: </strong>", Sexo, "<br>",
+      "<strong>Intentos: </strong>", Intentos, "<br>",
+      "<strong>Completados: </strong>", Completados, "<br>"
+    ),
+    group = "Hombres"
+  ) %>%
+  addCircleMarkers(
+    data = data_mujeres,
+    lng = ~Longitude,
+    lat = ~Latitude,
+    radius = ~sqrt(Completados) * 2,
+    stroke = TRUE,
+    fillOpacity = 0.7,
+    popup = ~paste0(
+      "<strong>Municipio: </strong>", Municipio, "<br>",
+      "<strong>Sexo: </strong>", Sexo, "<br>",
+      "<strong>Intentos: </strong>", Intentos, "<br>",
+      "<strong>Completados: </strong>", Completados, "<br>"
+    ),
+    group = "Mujeres"
+  ) %>%
+  addLayersControl(
+    overlayGroups = c("Hombres", "Mujeres"),
+    options = layersControlOptions(collapsed = FALSE)
+  ) 
+
+Suicidio_Mapa 
+
+```
+
+El mapa nos permite ver la información en canada municipio separado por hombres y mujeres.

@@ -1,0 +1,373 @@
+---
+title-block-banner: true
+title: "Características epidemiológicas y clínicas de los Trastornos del Neurodesarrollo en población infantil en el periodo 2016 al 2023"
+subtitle: "Cuaderno de análisis de datos"
+date: today
+date-format: full
+author: 
+  - name: "Gloria Andrea Rico Velasco"
+    orcid: XXXX
+    degrees:
+      - MsC
+    affiliation: 
+      - name: Universidad San Buenaventura 
+        department: Psicología
+keywords: 
+  - Neurodesarrollo
+  - Políticas públicas de salud mental
+  - Transtornos del neurodesarrollo
+
+license: "CC BY"
+
+format:
+   html:
+    code-fold: false
+    embed-resources: true
+    toc: true
+    toc-depth: 2
+    toc-location: left
+    number-sections: true
+    theme: spacelab
+   
+   typst: 
+    toc: true
+    number-sections: true
+    colorlinks: true
+
+knitr:
+  opts_chunk: 
+    warning: false
+    message: false
+---
+
+Esta investigación tiene como objetivo describir las características epidemiológicas de los trastornos del neurodesarrollo en población infantil en Colombia. 
+
+# Instalacion de paquetes
+
+A continuación se instalan los paquetes necesarios para desarrollar el modelo estadístico.
+
+```{r}
+if (!require("brms")) install.packages("brms")
+if (!require("broom.mixed")) install.packages("broom.mixed")
+if (!require("dplyr")) install.packages("dplyr")
+if (!require("ggalluvial")) install.packages("ggalluvial")
+if (!require("ggplot2")) install.packages("ggplot2")
+if (!require("glmmTMB")) install.packages("glmmTMB")
+if (!require("here")) install.packages("here")
+if (!require("lme4")) install.packages("lme4")
+if (!require("MASS")) install.packages("MASS")
+if (!require("MetBrewer")) install.packages("MetBrewer")
+if (!require("performance")) install.packages("performance")
+if (!require("readxl")) install.packages("readxl")
+if (!require("tidybayes")) install.packages("tidybayes")
+```
+# Funciones para visualizacion de datos
+
+```{r}
+Plot_theme <- theme_classic() +
+  theme(
+      plot.title = element_text(size=18, hjust = 0.5, face="bold"),
+      plot.subtitle = element_text(size = 10, color = "black"),
+      plot.caption = element_text(size = 12, color = "black"),
+      axis.line = element_line(colour = "black", linewidth = 1.5, linetype = "solid"),
+      axis.ticks.length=unit(7,"pt"),
+     
+      axis.title.x = element_text(colour = "black", size = 16),
+      axis.text.x = element_text(colour = "black", size = 16, angle = 0, hjust = 0.5),
+      axis.ticks.x = element_line(colour = "black", linewidth = 1),
+      
+      axis.title.y = element_text(colour = "black", size = 16),
+      axis.text.y = element_text(colour = "black", size = 16),
+      axis.ticks.y = element_line(colour = "black", linewidth = 1),
+      
+      legend.position="right",
+      legend.direction="vertical",
+      legend.title = element_text(colour="black", face="bold", size=12),
+      legend.text = element_text(colour="black", size=10),
+      
+      plot.margin = margin(t = 10,  # Top margin
+                             r = 2,  # Right margin
+                             b = 10,  # Bottom margin
+                             l = 10) # Left margin
+      ) 
+```
+
+
+
+
+# Lectura y limpieza de dataset 
+
+Se cargan los datos contedidos en la tabla "Data/Ministerio_Datos_Limpios.xlsx". Se eliminan las casillas con valores faltantes "NA"
+
+```{r}
+##leer archivo excel
+
+Datos_Limpios_Analisis_Ministerio <- read_excel(here("Data/Ministerio_Datos_Limpios.xlsx"))
+
+# Eliminar filas con valores NA en cualquier columna
+Datos_Limpios_Analisis_Ministerio <- na.omit(Datos_Limpios_Analisis_Ministerio)
+
+str (Datos_Limpios_Analisis_Ministerio)
+```
+
+## Procesamiento de los datos
+
+A continuación procesamos la columa de "Edades" para seleccionar solamente los valores numéricos y establecemos la columna de sexo como un factor:
+
+```{r}
+Datos_Limpios_Analisis_Ministerio <- Datos_Limpios_Analisis_Ministerio %>%
+  mutate(
+    Edades = as.numeric(gsub("De | años", "", Edades)),
+    Sexo = factor(Sexo, levels = c("FEMENINO", "MASCULINO")),
+    Diagnostico = factor(Diagnostico))
+    
+
+str(Datos_Limpios_Analisis_Ministerio)
+```
+
+# Exploración visual de los datos
+
+Para este ejercicio analizaremos tres diagnósticos. Los datos utilizados, denominados Datos_top_3, corresponden a los diagnósticos más prevalentes de trastornos del neurodesarrollo. En primer lugar, filtramos los datos, obteniendo los tres diagósticos más comunes y asegurandonos de que la tabla contenga solamente filas con "FEMENINO" Y "MASCULINO.
+
+```{r}
+top_3_diagnosticos <- Datos_Limpios_Analisis_Ministerio %>%
+  group_by(Diagnostico) %>%
+  summarise(total_diagnosticos = sum(cantidad_p, na.rm = TRUE)) %>%
+  arrange(desc(total_diagnosticos)) %>%
+  slice_head(n = 3) %>%
+  pull(Diagnostico)  # Extraer los 3 diagnósticos más prevalentes
+
+Datos_top_3 <- Datos_Limpios_Analisis_Ministerio %>%
+  filter(Diagnostico %in% top_3_diagnosticos)
+Datos_top_3 <- filter(Datos_top_3,Sexo=='FEMENINO'| Sexo=='MASCULINO')
+Datos_top_3$Diagnostico <- factor(Datos_top_3$Diagnostico, levels = c("F808", "F809", "F900"))
+
+```
+
+
+Ahora, visualizamos la distribución: 
+
+```{r}
+#| label: fig-Neurodesarrollo_Expl
+#| include: true
+#| warning: false
+#| message: false
+#| fig-cap: Evolución del número de diagnósticos por sexo
+#| fig-height: 8
+#| fig-width: 8
+
+
+Neurodesarrollo_Expl <- ggplot(
+Datos_top_3 ,
+  aes(
+    x = Año,
+    y = cantidad_p,
+    color = Diagnostico
+  )
+) +
+  geom_violin()+
+  geom_point(position = position_jitter(width = 0.1)) +
+  labs(y = "Cantidad de diagnósticos")+
+  ggtitle("Evolución de los diagnósticos del neurodesarrollo")+
+  Plot_theme +
+  theme(legend.position = "bottom",
+        legend.direction = "horizontal") +
+  facet_wrap(~ Sexo)
+
+
+ggsave(Neurodesarrollo_Expl,
+       filename = here("Plots/Neurodesarrollo_Expl.png"),
+       width    = 16, 
+       height   = 12, 
+       units    = "cm")
+
+Neurodesarrollo_Expl
+```
+@fig-Neurodesarrollo_Expl revela que los diagnósticos pueden alcanzar más de 1000 y presentar una dispersion sustancial que no permite observar su distribución. Esto indica que aunque exiten cantidades elevadas de diagnósticos, la mayoría de ellos se encuentran centrados en números bajos (ceranos al cero). Debido a la naturaleza y dispersion de los datos, es oportuno modelarlos utilizando una distribución negativa binomial. 
+
+
+# Modelo de regresion lineal
+
+El objetivo de este análisis es evaluar el efecto de las variables Año_cod (años codificados) y Diagnóstico (categoría de diagnóstico) sobre la variable dependiente cantidad_p, que representa la cantidad de casos reportados. Ajustamos el siguiente modelo:
+
+$$
+Casos = \beta_0 + \beta_1 \times Año + \beta_2 \times Diagnóstico + \beta_3 \times (Año \times Diagnóstico) + \epsilon_i
+$$
+
+donde $\beta_0$ es el intercepto, que representa el número de casos en el año (2016) y el diagnóstico base (F808).$\beta_1$ es el efecto del año en el número de casos. $\beta_2$ son los coefficientes que representan el efecto de cada diagnóstico y $\beta_3$ es la interacción entre los dos predictores. Finalmente, $\epsilon_i$ representa el error que sigue una distribución student-t
+
+## Ajuste del modelo
+
+Utilizamos una distribución binomial negativa (`negbinomial`) para modelar los datos, considerando la interacción entre el diagnóstico y el año. 
+
+```{r}
+Neurodesarrollo_Mdl1 <- bf(cantidad_p ~ Año_cod * Diagnostico)
+
+get_prior(Neurodesarrollo_Mdl1, Datos_top_3, family = negbinomial())
+
+Neurodesarrollo_Fit1 <-
+  brm(
+    data = Datos_top_3,
+    family = negbinomial,
+    formula = Neurodesarrollo_Mdl1,
+    chains = 4,
+    cores = 4,
+    warmup = 2500,
+    iter = 5000,
+    seed = 8807,
+    control = list(adapt_delta = 0.99, max_treedepth = 15),
+    file = here("Models/Neurodesarrollo_Fit1.rds"),
+    file_refit = "never"
+  )
+```
+A continuación, visualizamos los coefficientes obtenidos:
+
+```{r}
+summary(Neurodesarrollo_Fit1)
+```
+Con el procedimiento anterior utilizamos una distribución binomial negativa para la variable respuesta. Esta distribución es apropiada en casos donde el recuento de unidades presenta sobredispersión, es decir, donde la varianza supera con creces a la media.
+
+La función de enlace para el parámetro de la media ($\mu$) es el enlace logarítmico. Esto implica que $log (\mu)$ = predictor lineal. Para interpretar estos resultados en la escala natural, es necesario exponenciar los coefficientes:
+
+- El intercepto (el valor del diagnóstico F808 en el 2016) es exp(1.35) ≈ 3.86
+
+- El efecto del año es exp(0.04) ≈ 1.04. Esto implica un aumento del 4% por cada año que pasa.
+
+- El diagnóstico F809 hay un incremento de exp(0.12) ≈ 1.13, un aumento del 13% en el 2016. Por otra parte, el aumento para F900 aumenta en exp(0.79) ≈ 2.20, un incremento del 120%.
+
+- Para el diagnóstico F809, el cambio por año reduce el incremento de diagnósticos en exp(-0,02) ≈0,98. Es decir, una disminución del 2% por unidad. Por el contrario, esta disminución es de exp(-0,08)≈0,92 (8% por unidad) para el diagnóstico F900. 
+
+- Finalmente, el coefficiente para shape es 0,60, lo que nos sugiere una sobredispersión moderada en los conteos.
+
+
+Ahora visualizamos los resultados utilizando la función `conditional_effects`:
+
+
+```{r}
+#| label: fig-Neurodesarrollo_Fit1
+#| include: true
+#| warning: false
+#| message: false
+#| fig-cap: Evolución del número de diagnósticos por año
+#| fig-height: 5
+#| fig-width: 5
+
+Neurodesarrollo_CE <- conditional_effects(Neurodesarrollo_Fit1) 
+
+Neurodesarrollo_CE_Fig <- plot(Neurodesarrollo_CE , plot = FALSE)[[3]]
+
+Neurodesarrollo_CE_Fig <- Neurodesarrollo_CE_Fig +
+  labs(title = "Evolución del número de diagnósticos",
+       y = "Número de diagnósticos",
+       x = "Año") +
+  Plot_theme +
+  theme(legend.position = "bottom",
+        legend.direction = "horizontal")
+
+ggsave (Neurodesarrollo_CE_Fig,
+        file = here("Plots/Neurodesarrollo_Fit1.jpg"),
+        width = 15,
+        height = 12,
+        units = "cm")
+
+Neurodesarrollo_CE_Fig
+```
+@fig-Neurodesarrollo_Fit1 nos muestra las estimaciones como fueran descritas anteriormente. Podemos utilizar una visualizaón alternativo con la función `add_epred_draws` de `tidybayes`.
+
+```{r}
+#| label: fig-Neurodesarrollo_Fig2
+#| include: true
+#| warning: false
+#| message: false
+#| fig-cap: Evolución del número de diagnósticos por año
+#| fig-height: 5
+#| fig-width: 5
+
+clrs <- MetBrewer::met.brewer("Lakota", 6)
+
+Neurodesarrollo_CE_Fig2 <- Datos_top_3 %>%
+  add_epred_draws(Neurodesarrollo_Fit1, ndraws = 50, allow_new_levels = TRUE) %>%
+  ggplot(aes(x = Año_cod, y = cantidad_p, color = Diagnostico)) +
+  geom_point(data = Datos_top_3, size = 1) +
+  geom_line(aes(y = .epred, group = paste(Diagnostico, .draw)), 
+            size = 0.5, alpha = 0.3) +
+  scale_color_manual(values = c(clrs[6], clrs[3], clrs[2])) +
+  labs(title = "Evolución del número de diagnósticos",
+        x = "Año", 
+       y = "Número de diagnósticos", 
+       color = "Party") +
+  scale_y_continuous(limits = c(0, 10)) +
+  Plot_theme +
+  theme(legend.position = "bottom",
+        legend.direction = "horizontal")
+
+ggsave (Neurodesarrollo_CE_Fig2,
+        file = here("Plots/Neurodesarrollo_Fit1_2.jpg"),
+        width = 15,
+        height = 12,
+        units = "cm")
+
+Neurodesarrollo_CE_Fig2
+```
+
+
+Adicionalmente, podemos hacer una validación del modelo utilizando la fuincion `pp_check` de `brms`.
+
+```{r}
+#| label: fig-Neurodesarrollo_pp
+#| include: true
+#| warning: false
+#| message: false
+#| fig-cap: Evaluación del modelo ajustado
+#| fig-height: 4
+#| fig-width: 4
+
+pp_check(Neurodesarrollo_Fit1, ndraws = 50) +
+  scale_x_continuous(limits=c(0, 25)) 
+```
+@fig-Neurodesarrollo_pp Nos muestra que nuestras predicciones se desvían sustancialmente de las observaciones. Esto quiere decir que nuestro modelo no es lo suficientemente explicativo para capturar la naturaleza del número de diagnósticos. 
+
+# Modelo multinivel
+
+Como complemento, realizamos el ajusted de un modelo multinivel para considerar la dispersión de datos por departamento. 
+
+```{r}
+Neurodesarrollo_Fit2 <- glmer(cantidad_p ~ Año_cod * Diagnostico + (1|Departamento),
+                              family = "poisson", 
+                              data = Datos_top_3,
+                              control = glmerControl(optimizer = "bobyqa"))
+```
+Imprimimos los resultados de igual manera que con el modelo anterior:
+
+```{r}
+summary(Neurodesarrollo_Fit2)
+```
+
+Y visualizamos los resultados:
+
+```{r}
+#| label: fig-Neurodesarrollo_Fit2
+#| include: true
+#| warning: false
+#| message: false
+#| fig-cap: Evaluación del modelo ajustado
+#| fig-height: 6
+#| fig-width: 12
+
+
+tidy_re <- tidy(Neurodesarrollo_Fit2 , effects = "ran_vals", conf.int = TRUE)
+
+tidy_Departamento <- tidy_re %>%
+  filter(group == "Departamento")
+
+ggplot(tidy_Departamento, aes(x = estimate, y = level)) +
+  geom_point() +
+  geom_errorbarh(aes(xmin = conf.low, xmax = conf.high)) +
+  labs(
+    title = "Group-level effects por departamento",
+    x = "Casos",
+    y = "Departamento"
+  ) +
+  theme_minimal() 
+```
+@fig-Neurodesarrollo_Fit2 nos muestra la desviación de diagnósticos por departamento. 

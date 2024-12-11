@@ -1,0 +1,232 @@
+---
+title: "Conducta_Suicida_2013_2021"
+author: "Carolina"
+format: html
+editor: visual
+---
+
+# Análisis de marcadores de la relación entre las variables: casos de suicidio e intentos de suicidio en el departamento del Tolima para el periodo de 2013 - 2021
+
+## Cargar las librerias
+
+```{r}
+# Instalar paquetes necesarios
+install.packages("readxl")   # Para leer archivos Excel
+install.packages("ggplot2")  # Para visualización opcional
+install.packages("broom")    # Para organizar los resultados de regresión
+
+# Cargar librerías
+library(readxl)
+library(ggplot2)
+library(broom)
+```
+
+```{r}
+install.packages("openxlsx")
+library(openxlsx)
+```
+
+## Cargar los datos
+
+A continuación cargaremos los datos recopilados desde el archivo "Data/Cond_Suicida_2013_2021" que contiene información de marcadores de la Casos_Suicidio y Casos_Intento del departamento del Tolima para el periodo 2013 - 2021.
+
+```{r}
+# Cargar la librería necesaria para leer archivos Excel
+library(openxlsx)
+
+# Ruta del archivo Excel
+file_path <- here("Data/Cond_Suicida_2013_2021.xlsx")
+
+# Leer el archivo Excel
+data <- read.xlsx(file_path)
+
+# Limpiar los nombres de las columnas (eliminar espacios extra)
+colnames(data) <- trimws(colnames(data))
+
+# Ver los primeros registros para confirmar que la lectura fue correcta
+head(data)
+
+
+```
+
+De la tabla anterior estamos interesados en las variables dependiente 1) Municipio: Es una variable categórica que clasifica a los municipios en función de la conducta suicida. Variables independientes 2) a. Intentos de suicidio: Variable numérica que refleja el número de intentos de suicidio registrados en cada municipio. 3) Casos Suicidio: Variable numérica que refleja el número de suicidios completos registrados en cada municipio
+
+## Visualización los datos
+
+Utilizaremos la librería (dplyr) para observar la tabla de los datos de la conducta suicida del departamento del Tolima para el periodo 2013 - 2021.
+
+```{r}
+# Cargar la librería dplyr
+library(dplyr)
+
+# Visualizar la tabla en formato tibble
+glimpse(data)
+
+# Imprimir la tabla completa
+print(data)
+
+# Seleccionar solo las columnas 'Casos_Suicidio' y 'Casos_Intento'
+data %>%
+  select(Casos_Suicidio, Casos_Intento)
+
+# Resumen estadístico de las columnas numéricas
+summary(data)
+
+```
+
+Utilizaremos la librería (ggplot2) para observar la distribución de la conducta suicida del departamento del Tolima para el periodo 2013 - 2021.
+
+```{r}
+# Cargar la librería ggplot2
+library(ggplot2)
+
+# Crear el gráfico de dispersión con la línea de regresión
+ggplot(data, aes(x = Casos_Intento, y = Casos_Suicidio)) +
+  geom_point(color = "blue", alpha = 0.6) +  # Puntos del gráfico de dispersión
+  geom_smooth(method = "lm", color = "red", linetype = "dashed") +  # Línea de regresión
+  labs(title = "Regresión Lineal entre Casos de Suicidio y Casos de Intento", 
+       x = "Casos de Intento", 
+       y = "Casos de Suicidio") +
+  theme_minimal()
+
+```
+
+En el gráfico se puede apreciar que hay una relación positiva entre las dos variables. Es decir, a medida que aumentan los casos de intento de suicidio, también aumentan los casos de suicidio. Esta tendencia es consistente con la idea de que los intentos de suicidio pueden ser un indicio o factor de riesgo para suicidios consumados.
+
+```{r}
+# Instalar librerías (si no están instaladas)
+install.packages("nnet")    # Para regresión logística multinomial
+install.packages("ggplot2")  # Instala ggplot2 y otros paquetes relacionados 
+
+# Cargar librerías
+library(nnet)
+library(ggplot2)
+```
+
+Descripción de la Distribución de Casos de Suicidio e Intentos por Municipio
+
+```{r}
+# Convertir Municipio a factor
+data$Municipio <- as.factor(data$Municipio)
+
+# Verificar la conversión
+str(data)
+```
+
+Los datos anteriores muestran información sobre el suicidio y los intentos de suicidio en 47 municipios del Tolima, diferenciando entre hombres y mujeres. Se observa que las tasas de suicidio y de intentos de suicidio varían entre los municipios. Sin embargo, al realizar análisis más detallados, como el modelo de regresión, no se encontró una relación estadísticamente significativa entre las variables de suicidio e intentos de suicidio en hombres y mujeres con las tasas de incidencia y mortalidad.
+
+## Modelo de Regresión Multinomial
+
+El análisis se basa en un modelo de regresión multinomial que predice el municipio de origen de los datos a partir de dos variables predictoras: Casos de Suicidio y Casos de Intento de Suicidio
+
+```{r}
+# Predicciones con los datos originales
+predicciones <- predict(modelo_municipio, newdata = data)
+
+# Agregar predicciones al dataset original
+data$Predicted_Municipio <- predicciones
+
+# Ver los resultados
+head(data)
+```
+
+El modelo muestra cómo los casos de suicidio y de intentos de suicidio en los municipios podrían influir en la predicción de a qué municipio pertenece cada observación. A pesar de que el modelo se ajustó correctamente, algunos municipios tienen coeficientes muy altos o bajos, lo que indica que las variables no siempre se comportan de manera consistente.Aunque el modelo permite hacer predicciones sobre el municipio basado en los casos de suicidio e intentos de suicidio, la precisión de las predicciones podría mejorar. Se sugiere explorar más variables que puedan influir en los datos, así como realizar una evaluación más detallada del modelo para asegurarse de que las predicciones sean lo más precisas posibles
+
+## Evaluación de la Precisión del Modelo de Predicción de Municipios mediante la Clasificación de Casos de Suicidio e Intentos de Suicidio
+
+```{r}
+# Crear matriz de confusión
+table(Predicted = data$Predicted_Municipio, Actual = data$Municipio)
+```
+
+El análisis realizado utilizando el modelo de predicción basado en los casos de suicidio y intentos de suicidio ha permitido clasificar correctamente los municipios en su mayoría. La matriz de confusión indica que, aunque el modelo realiza una buena cantidad de predicciones correctas, aún existen algunos errores de clasificación, lo que sugiere que ciertos municipios son más difíciles de predecir debido a características similares entre ellos. Esto resalta la necesidad de ajustar el modelo o incorporar variables adicionales para mejorar su capacidad de diferenciación entre los municipios. En general, el modelo muestra un desempeño aceptable, pero hay margen para optimizar su precisión en futuras interaciones.
+
+## Distribución de Casos de Suicidio e Intentos de Suicidio por Municipio
+
+```{r}
+install.packages("ggplot2")
+
+library(ggplot2)
+
+ggplot(data, aes(x = Casos_Suicidio, y = Casos_Intento, color = Municipio)) +
+  geom_point(size = 3) +
+  labs(title = "Distribución de Suicidios e Intentos por Municipio",
+       x = "Casos de Suicidio",
+       y = "Casos de Intentos") +
+  theme_minimal()
+```
+
+A partir de la visualización de la distribución de casos de suicidio y de intentos de suicidio por municipio, se observa que no hay una tendencia lineal clara entre los dos variables, lo que podría indicar que factores diferentes a la cantidad de suicidios están influyendo en los intentos. Además, la dispersión de los puntos sugiere que algunos municipios presentan altas tasas de intentos con un número relativamente bajo de suicidios, mientras que otros presentan el patrón contrario. Esto resalta la importancia de considerar el contexto específico de cada municipio en la prevención y tratamiento de la salud mental. En general, las políticas de intervención deben estar adaptadas a las características particulares de cada comunidad.
+
+## Relación entre Casos de Suicidio y la Probabilidad de Pertenecer al Municipio
+
+```{r}
+# Calcular probabilidades predichas
+probabilidades <- predict(modelo_municipio, newdata = data, type = "probs")
+
+# Agregar probabilidades al dataset
+data$Prob_Municipio1 <- probabilidades[, 1]  # Probabilidad para el primer municipio
+data$Prob_Municipio2 <- probabilidades[, 2]  # Probabilidad para el segundo municipio
+# ...repite según el número de municipios
+
+# Graficar probabilidades para un municipio
+ggplot(data, aes(x = Casos_Suicidio, y = Prob_Municipio1)) +
+  geom_point() +
+  geom_smooth(method = "loess") +
+  labs(title = "Probabilidad de Pertenecer al Municipio 1",
+       x = "Casos de Suicidio",
+       y = "Probabilidad")
+```
+
+El gráfico muestra la relación entre los casos de suicidio y la probabilidad de que un municipio pertenezca al Municipio 1 según el modelo de regresión multinomial. Al observar la tendencia, podemos ver que a medida que aumentan los casos de suicidio, la probabilidad de pertenecer al Municipio 1 varía de una forma específica, que podría estar asociada con factores locales o específicos de cada municipio. La curva suavizada indica cómo esta probabilidad se comporta en diferentes rangos de suicidios, sugiriendo que el número de suicidios podría tener un impacto significativo en la clasificación del municipio dentro de esta categoría. Sin embargo, es importante considerar que otros factores podrían influir en las probabilidades, y no solo los suicidios.
+
+## Precisión del Modelo para Predecir el Municipio
+
+```{r}
+# Calcular precisión
+mean(data$Municipio == data$Predicted_Municipio)
+```
+
+A pesar de que el modelo de predicción muestra una alta precisión del 87.23%, sugiriendo una relación general entre los intentos de suicidio y los suicidios, los errores en un 12.77% de las predicciones indican que esta relación no siempre es directa. Esto sugiere que hay otros factores adicionales que influyen en la tasa de suicidios en los municipios. Factores como el acceso a servicios de salud mental, las condiciones socioeconómicas, culturales y el nivel de apoyo social pueden tener un impacto considerable en los resultados. Por lo tanto, aunque más intentos de suicidio pueden correlacionarse con más suicidios en la mayoría de los casos, no siempre ocurre así, y es importante considerar una gama más amplia de factores al abordar la prevención del suicidio.
+
+## Planteamiento de Hipótesis
+
+Quiero dar respuesta a estas dos preguntas que se plantearon inicialmente en este estudio:
+
+1.  ¿Los municipios con más intentos siempre tienen más suicidios? No; Aunque hay una relación general entre el número de intentos de suicidio y la cantidad de suicidios consumados en los municipios, el modelo muestra que no siempre los municipios con más intentos tienen más suicidios. La precisión del modelo es del 87.23%, lo que indica que, en la mayoría de los casos, el modelo captura correctamente la relación entre intentos y suicidios. Sin embargo, en el 12.77% de los casos el modelo comete errores, lo que sugiere que hay municipios donde la relación entre ambos no es tan directa. Esto puede deberse a factores adicionales, como el acceso a servicios de salud mental, la presencia de programas de prevención, o redes de apoyo comunitarias que pueden reducir la tasa de suicidios consumados, aun cuando los intentos sean elevados.
+
+2.  ¿Existen excepciones donde los intentos son altos, pero los suicidios no? Sí, existen excepciones donde los municipios tienen un alto número de intentos de suicidio pero una tasa baja de suicidios consumados. Esto sugiere la presencia de factores protectores que disminuyen el riesgo de que un intento de suicidio resulte en un suicidio consumado. Estos factores pueden incluir un buen acceso a servicios de salud mental, intervenciones preventivas efectivas (como líneas de emergencia o programas de apoyo), o un entorno social y cultural que fomente la búsqueda de ayuda. En estos casos, aunque los intentos son altos, los esfuerzos de prevención y el apoyo emocional y psicológico pueden haber evitado que esos intentos terminen en tragedias, lo que refleja una relación más compleja entre intentos y suicidios que la que se observa a simple vista.
+
+## Interpretación de los Resultados
+
+El análisis realizado sugiere que, aunque en muchos municipios existe una relación entre la cantidad de intentos de suicidio y los suicidios consumados, no siempre los municipios con más intentos presentan un aumento proporcional en los suicidios. El modelo de regresión multinomial alcanzó un 87.23% de precisión, lo que indica que, en la mayoría de los casos, el modelo predice correctamente la relación entre intentos y suicidios. Sin embargo, la precisión no es perfecta, lo que revela que la relación entre estos dos factores no es estrictamente lineal. Esto sugiere que existen otros factores que influyen en los resultados más allá de la simple cantidad de intentos.
+
+# Hallazgos clave:
+
+Relación no lineal Si bien se observa una correlación entre los intentos de suicidio y los suicidios consumados en muchos municipios, el análisis revela una variabilidad significativa entre ellos. En algunos municipios, la relación no es tan clara, ya que se reportan altos índices de intentos de suicidio, pero sin un aumento proporcional en los suicidios consumados. Esto indica que hay factores adicionales que moderan esta relación. Entre estos factores podrían estar las políticas públicas locales de salud mental, las intervenciones sociales, el acceso a tratamiento psicológico y psicofarmacológico, o incluso las características socioeconómicas particulares de cada municipio.
+
+#Excepciones notables: Se han identificado excepciones significativas donde algunos municipios presentan una gran cantidad de intentos de suicidio, pero no hay un aumento correspondiente en los suicidios. Este hallazgo sugiere que en estos municipios podrían existir programas de prevención del suicidio más efectivos o intervenciones sociales que estén reduciendo el impacto de los intentos. Las estrategias como el apoyo psicológico, la intervención temprana, y las campañas de sensibilización podrían estar desempeñando un papel clave en mitigar los efectos de los intentos de suicidio.
+
+# Proporción entre intentos y suicidios:
+
+Un aspecto importante para abordar estas excepciones es la proporción entre intentos y suicidios. Algunos municipios muestran una alta tasa de intentos, pero una baja tasa de suicidios. Esto podría ser indicativo de que los esfuerzos preventivos y los programas de intervención en salud mental están funcionando correctamente, previniendo que los intentos se conviertan en suicidios consumados. Municipios en esta categoría podrían beneficiarse de la implementación de estrategias más focalizadas, tales como mejorar la atención psiquiátrica y aplicar medidas preventivas a nivel comunitario.
+
+#Recomendaciones y líneas futuras de investigación: Factores contextuales adicionales: Para comprender mejor los patrones de suicidio e intento, es esencial investigar más a fondo factores contextuales que podrían estar influyendo en estos resultados. Entre estos factores, se incluyen el acceso a servicios de salud mental, las políticas locales de prevención, y la prevalencia de trastornos psiquiátricos comunes, como la depresión y la ansiedad.
+
+Análisis longitudinal: Un análisis más detallado a lo largo del tiempo podría arrojar información valiosa sobre cómo evolucionan los intentos y suicidios consumados en los municipios. Además, esto permitiría evaluar cómo las intervenciones y cambios en las políticas públicas afectan la relación entre estos dos indicadores.
+
+Estrategias de intervención específicas: Los municipios con una alta prevalencia de intentos pero baja tasa de suicidios representan una oportunidad clave para diseñar programas de prevención más efectivos. Es fundamental fortalecer los programas de salud mental comunitarios y fomentar la educación sobre la prevención del suicidio, con un énfasis especial en la intervención temprana y en el tratamiento de los trastornos mentales.
+
+# Conclusión general:
+
+Aunque el análisis muestra que la mayoría de los municipios siguen la relación esperada entre intentos y suicidios, las excepciones resaltan que factores sociales, económicos y de intervención pueden jugar un papel decisivo en la dinámica del suicidio. A medida que avanzamos, es crucial investigar más a fondo estos factores y diseñar estrategias de intervención que ayuden no solo a reducir los intentos de suicidio, sino también a evitar que estos se conviertan en suicidios consumados. Las intervenciones a nivel local, en combinación con políticas públicas adecuadas, pueden marcar una gran diferencia en la prevención del suicidio.
+
+## Referencias
+
+Boletín de notificación semanal de intento de suicidio en departamento del Tolima, año 2021 presentación del comportamiento epidemiológicos de intento de suicidio y suicidio consumado) Disponible https://www.minsalud.gov.co/sites/rid/Lists/BibliotecaDigital/RIDE/VS/PP/ENT/boletin-conducta-suicida.pdf Boletín Epidemiológico Semanal – Comportamiento de la vigilancia del intento de suicidio Colombia Periodo VIII de 2021) disponible https://www.ins.gov.co/buscador-eventos/BoletinEpidemiologico/2021_Boletin_epidemiologico_semana_35.pdf
+
+Boletín de notificación semanal de intento de suicidio en departamento del Tolima, (años 2021 y 2022)
+
+Tolima Secretaría de Salud. (2014). Boletín de salud mental, departamento del Tolima 2013. Ibague. Disponible https://dssa.gov.co/generalidades-asis
+
+Tolima Secretaría de Salud. (2023). Misión de la secretaria de salud del Tolima 2023. Disponible http://www.saludtolima.gov.co/category/entidad/institucional/

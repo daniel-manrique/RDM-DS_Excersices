@@ -1,0 +1,406 @@
+---
+title-block-banner: true
+title: "Tipo de apego al arquitipo en la mujer bogotana: relación con el tipo de crianza y estilos de apego"
+subtitle: "Cuaderno de análisis de datos"
+date: today
+date-format: full
+author: 
+  - name: "Denise Bernardo Ferreira"
+    orcid: https://orcid.org/0000-0002-0333-7034
+    degrees:
+      - MsC
+    affiliation: 
+      - name: Universidad San Buenaventura 
+        department: Psicología
+keywords: 
+  - Estilos de crianza
+  - Tipos de apego
+  - Mujer bogotana
+
+license: "CC BY"
+
+format:
+   html:
+    code-fold: false
+    embed-resources: true
+    toc: true
+    toc-depth: 2
+    toc-location: left
+    number-sections: true
+    theme: spacelab
+   
+   typst: 
+    toc: true
+    number-sections: true
+    colorlinks: true
+
+knitr:
+  opts_chunk: 
+    warning: false
+    message: false
+---
+
+# Introducción
+
+Este cuaderno implementa el análisis de un modelo de estructura emocional de la mujer joven adulta universitaria bogotana.
+
+# Instalación y carga de paquetes
+
+Se instalan y cargan los paquetes que permiten cargar los datos y trabajar con modelos de regresión logística ordinal y multinomial:
+
+```{r}
+if (!require("brms")) install.packages("brms")
+if (!require("dplyr")) install.packages("dplyr")
+if (!require("ggalluvial")) install.packages("ggalluvial")
+if (!require("ggplot2")) install.packages("ggplot2")
+if (!require("glmmTMB")) install.packages("glmmTMB")
+if (!require("here")) install.packages("here")
+if (!require("performance")) install.packages("performance")
+if (!require("readxl")) install.packages("readxl")
+```
+# Cargar los datos
+
+Leemos el archivo de Excel que contiene los datos MujerBogata_Data_Oct_2024.xlsx.Utilizamos la función `here` para llamar los datos desde la carpeta "Data" en el working folder. Este comando carga el archivo en un objeto llamado `datos`.
+
+```{r}
+datos <- read_xlsx (here("Data/MujerBogata_Data_Oct_2024.xlsx"))
+head(datos)
+```
+
+Vemos que la tabla contiene cuatro variables denominadas: ARQUETIPO, APEGO, CRIANZA, REGULACIONEMOCIONAL.
+
+# Transformación de las variables
+
+A continuación, transformamos los nombres de las variables para facilitar la visualización en interpretación de los datos:
+
+```{r}
+datos_trans <- datos %>%
+    mutate(ARQUETIPO = recode(ARQUETIPO, 
+                              "1" = 'Bajo',
+                              "2" = 'Moderado', 
+                              "3" =  'Alto'),
+           APEGO = recode(APEGO, 
+                          "1" = 'Seguro', 
+                          "2" = 'Ansioso', 
+                          "3" =  'Evitativo', 
+                          "4" = "Desorganizado"),
+           CRIANZA = recode(CRIANZA, 
+                            "1" = 'Autoritario', 
+                            "2" = 'Permisivo', 
+                            "3" =  'Negligente', 
+                            "4" = "Autoritario_Democratico"))
+```
+
+
+Y nos aseguramos que sean identificados como factores:
+
+```{r}
+# Convertimos las columnas de interes en factores (nótese que Arquetipo es ordenada)
+
+datos_trans$ARQUETIPO <- factor(datos_trans$ARQUETIPO, 
+                                levels = c("Bajo", 
+                                           "Moderado", 
+                                           "Alto"), 
+                                ordered = TRUE)
+
+datos_trans$APEGO <- factor(datos_trans$APEGO, 
+                            levels = c("Seguro", 
+                                       "Ansioso", 
+                                       "Evitativo", 
+                                       "Desorganizado"))
+
+datos_trans$CRIANZA <- factor(datos_trans$CRIANZA, 
+                              levels = c("Autoritario", 
+                                         "Permisivo", 
+                                         "Negligente", 
+                                         "Autoritario_Democratico"))
+
+# Cambioamos los nombres de las columnas (variables)
+colnames(datos_trans) <- c("Arquetipo", 
+                           "Apego", 
+                           "Crianza", 
+                           "RegulacionEmocional")
+```
+
+Verificamos que la conversión de los datos fue satisfactoria. 
+
+```{r}
+str(datos_trans)
+```
+
+
+# Visualización de los datos
+
+```{r}
+#| label: fig-Arquetipo_Alluvial
+#| include: true
+#| warning: false
+#| message: false
+#| fig-cap: Relación entre el arquetipo, el apego y la crianza
+#| fig-height: 4
+#| fig-width: 6
+
+colors <- hcl.colors(4, "dark3")
+
+Arquetipo_Alluvial <- ggplot(datos_trans,
+       aes(axis1 = Arquetipo, 
+           axis2 = Apego, 
+           axis3 = Crianza)) +
+  geom_alluvium(aes(fill = Arquetipo), width = 1/5) +
+  geom_stratum(width = 1/3, color = "grey") +
+  geom_text(stat = "stratum", 
+            aes(label = after_stat(stratum))) +
+  scale_x_discrete(limits = c("Arquetipo", "Apego", "Crianza"), expand = c(.05, .05)) +
+  labs(title = "Relacion entre arquetipo, apego y crianza",
+       y = "Frecuencia")+
+  scale_fill_manual(values = colors) +
+  theme_minimal() 
+
+ggsave (Arquetipo_Alluvial,
+        file = here("Plots/MujerBogotana_ArquetipoAlluvial.jpg"),
+        width = 15,
+        height = 10,
+        units = "cm")
+
+Arquetipo_Alluvial
+
+```
+@fig-Arquetipo_Alluvial nos muestra que el apgo al arquetipo puede estar distribuido dependiendo de el tipo de apego y el estilo de crianza. Para desentrañar esta relación, emplearemos una regresión logística.
+
+
+# Modelamiento estadístico
+
+En primer lugar, emplearemos una regresión logística ordinal para modelar la relación entre el arquetipo (variable oredenada), y apego y crianza como factores predictores. Utilizaremos el paquete `brms` para ajustar el siguiente modelo:
+
+$$
+\text{logit}(P(Arquetipo_i \leq k)) = \tau_k - (\beta_1 \times Apego_i + \beta_2 \times Crianza_i)
+$$
+Donde $P(Arquetipo_i \leq k$ es la probabilidad de la respuesta por cada observación intre la categoría K o más bajo. $\tau_k$ es el parámetro para el umbral por categoría $k$, que representa los límites entre categorías. $\beta_1$ es el coeficiente para Apego, indicando el efecto en una escala de log-odds de ser una categoría inferior. $\beta_2$ es el coeficiente para crianza, cuantificado de las misma manera que para Apego. Este modelo asume probabilidaes (odds) proporcionales, lo que quiere decir que los prdictores son consistentes através de todos los umbrales. 
+
+## Ajuste del modelo
+
+```{r}
+
+Arquetipo_Mdl1 <- bf(Arquetipo ~ Apego + Crianza)
+
+get_prior(Arquetipo_Mdl1, datos_trans)
+
+Arquetipo_Fit1 <-
+  brm(
+    data = datos_trans,
+    family = "cumulative",
+    formula = Arquetipo_Mdl1,
+    chains = 4,
+    cores = 4,
+    warmup = 2500,
+    iter = 5000,
+    seed = 8807,
+    control = list(adapt_delta = 0.99, max_treedepth = 15),
+    file = here("Models/MujerBogotana_Arquetipo_Fit1.rds"),
+    file_refit = "never"
+  )
+```
+A continuación vemos la tabla de resultados:
+
+# Tabla de resultados
+
+```{r}
+summary(Arquetipo_Fit1)
+```
+
+
+De la tabla nos interesan los coeficientes para Apego y crianza. En primer lugar, los resultados indican que las probabilidades (odds) de que el apego ansioso genere una mayor categoría de arquetipo es 3.31 (95% = 2.60 to 4.04). La situación es análoga para el apego evitativo (3.27, 95% CI = 2.45 to 4.14) y apego desorganizado (3.57, 95% CI = 2.58 to 4.55). En este sentido, el apego segura esta estrechamente relacionado con un apego al arquetipo bajo. 
+
+Por otra parte, los resultados indican que la crianza permisiva no tiene un impacto sustancial sobre la probabilidad de un incremento en el arquetipo (0.08, 95% CI= -0.53 to 0.70), al igual que la crianza negligente (0.21, 95% CI= -0.32 to 0.73). No obstante, la crianza autoritaria/democrática parece tener un efecto negativo en la probabilidad (odds) de un tipo de arquetipo más alto (-3.61, 95% cI = -4.65 to -2.68).  
+
+En conjunto, los resultados sugieren que el estilo de apego tiene una relación diracto con un incremento en el tipo de arquetipo, con el apego desorganizado teniendo el impacto más alto. Por el contrario, los estilos de crianza tiene impactos más sutiles o inexistentes, con el estilo autoritorio/democrático reducingdo la probabilidad (odds) de un incremento en el apego. Ahora visualizemos los resultados en gráficos.
+
+# Visualización de resultados
+
+En primer lugar, evidenciamos el efecto de del apego en la deficinicón del arquetipo:
+
+```{r}
+#| label: fig-Arquetipo_CE_Apego
+#| include: true
+#| warning: false
+#| message: false
+#| fig-cap: Effecto del apego en el arquetipo
+#| fig-height: 4
+#| fig-width: 6
+
+Arquetipo_Apego_CE <- conditional_effects(Arquetipo_Fit1, "Apego", categorical = TRUE) 
+
+Arquetipo_Apego_Fig <- plot(Arquetipo_Apego_CE, plot = FALSE)[[1]]
+
+Arquetipo_Apego_Fig <- Arquetipo_Apego_Fig +
+  labs(title = "Effecto del tipo de apego en el arquetipo",
+       y = "Probabilidad",
+       x = "Tipo de apego")+
+  theme_classic()
+
+
+ggsave (Arquetipo_Apego_Fig,
+        file = here("Plots/MujerBogotana_Arquetipo_Apego.jpg"),
+        width = 15,
+        height = 10,
+        units = "cm")
+
+Arquetipo_Apego_Fig
+```
+
+@fig-Arquetipo_CE_Apego nos muestra que mujeres con apego seguro presentan una baja probabilidad de un arquetipo alto y se encuentra fuertemente relacionado con un bajo apego al arquetipo. Puede observarse también que las probabilidades para un arquetipo moderado y alto son similares para los estilos de crianza ansioso, evitativo y desorganizado.
+
+A continuación, visualizamos de forma análoga el efecto de la crianza:
+
+```{r}
+#| label: fig-Arquetipo_CE_Crianza
+#| include: true
+#| warning: false
+#| message: false
+#| fig-cap: Effecto del apego en el arquetipo
+#| fig-height: 4
+#| fig-width: 6
+
+Arquetipo_Crianza_CE <- conditional_effects(Arquetipo_Fit1, "Crianza", categorical = TRUE) 
+
+Arquetipo_Crianza_Fig <- plot(Arquetipo_Crianza_CE, plot = FALSE)[[1]]
+
+Arquetipo_Crianza_Fig <- Arquetipo_Crianza_Fig +
+  labs(title = "Effecto del tipo de crianza en el arquetipo",
+       y = "Probabilidad",
+       x = "Tipo de crianza")+
+  theme_classic()
+
+
+ggsave (Arquetipo_Crianza_Fig,
+        file = here("Plots/MujerBogotana_Arquetipo_Crianza.jpg"),
+        width = 15,
+        height = 10,
+        units = "cm")
+
+Arquetipo_Crianza_Fig
+
+```
+
+@fig-Arquetipo_CE_Crianza permite apreciar que el tipo de apego no posee efectos sustanciales en el apego al arquetipo. En todos, los casos, la mayor probabilidad para cualquier tipo de crianza es un arquetipo bajo, especialmente en el tipo autoritario/democrático.
+
+## Probar ajuste del modelo
+
+Finalmente, podemos utilizar la función `pp_check` de `brms` para visualizar el ajuste del modelo a las observaciones.
+
+```{r}
+#| label: fig-Arquetipo_CE_PPCheck
+#| include: true
+#| warning: false
+#| message: false
+#| fig-cap: Effecto del apego en el arquetipo
+#| fig-height: 4
+#| fig-width: 6
+
+pp_check(Arquetipo_Fit1)
+```
+@fig-Arquetipo_CE_PPCheck muestra que no existen desviaciones sustanciales de nuestro modelo (yrep) con referencia a las observaciones (y). 
+
+# Bonus
+
+Como un bunos vamos a referir el ajuste de un segundo modelo sin tener un cuenta un orden para la variable arquetipo. Esto lo hacemos remplazando la familia de "cumulative" a "categorical":
+
+```{r}
+Arquetipo_Mdl2 <- bf(Arquetipo ~ Apego * Crianza)
+
+get_prior(Arquetipo_Mdl2, datos_trans)
+
+Arquetipo_Fit2 <-
+  brm(
+    data = datos_trans,
+    family = "categorical",
+    formula = Arquetipo_Mdl2,
+    chains = 4,
+    cores = 4,
+    warmup = 2500,
+    iter = 5000,
+    seed = 8807,
+    control = list(adapt_delta = 0.99, max_treedepth = 15),
+    file = here("Models/MujerBogotana_Arquetipo_Fit2.rds"),
+    file_refit = "never"
+  )
+```
+Imprimimos la tabla de resultados:
+
+```{r}
+summary(Arquetipo_Fit2)
+```
+Los coefficientes se interpretan también en log-odds como en el caso anterior. 
+
+## Visualización de resultados
+
+Para el tipo de apego:
+
+```{r}
+Arquetipo_Apego_Cat_CE <- conditional_effects(Arquetipo_Fit2, "Apego", categorical = TRUE) 
+
+Arquetipo_Apego_Cat_Fig <- plot(Arquetipo_Apego_Cat_CE, plot = FALSE)[[1]]
+
+Arquetipo_Apego_Cat_Fig <- Arquetipo_Apego_Cat_Fig +
+  labs(title = "Effecto del tipo de Apego en el arquetipo",
+       y = "Probabilidad",
+       x = "Tipo de apego")+
+  theme_classic()
+
+
+ggsave (Arquetipo_Apego_Cat_Fig,
+        file = here("Plots/MujerBogotana_Arquetipo_Apego_Categorico.jpg"),
+        width = 15,
+        height = 10,
+        units = "cm")
+
+Arquetipo_Apego_Cat_Fig
+```
+Puede observarse que, en general, la tendencia no cambia sustancialmente aunque se observan cambios en probabilidades de ciertos grupos yu en los estimados. El modelo más adecuado debe seleccionarse de acuerdo con la naturaleza de los datos.Podemos hacer un ajercicio análogo para el tipo de crianza:
+
+```{r}
+Arquetipo_Crianza_Cat_CE <- conditional_effects(Arquetipo_Fit2, "Crianza", categorical = TRUE) 
+
+Arquetipo_Crianza_Cat_Fig <- plot(Arquetipo_Crianza_Cat_CE, plot = FALSE)[[1]]
+
+Arquetipo_Crianza_Cat_Fig <- Arquetipo_Crianza_Cat_Fig +
+  labs(title = "Effecto del tipo de crianza en el arquetipo",
+       y = "Probabilidad",
+       x = "Tipo de crianza")+
+  theme_classic()
+
+
+ggsave (Arquetipo_Crianza_Cat_Fig,
+        file = here("Plots/MujerBogotana_Arquetipo_Crianza_Categorico.jpg"),
+        width = 15,
+        height = 10,
+        units = "cm")
+
+Arquetipo_Crianza_Cat_Fig
+```
+
+
+# Modelo 3
+
+
+```{r}
+Arquetipo_Mdl3 <- bf(Arquetipo ~ Apego * Crianza)
+
+get_prior(Arquetipo_Mdl3, datos_trans)
+
+Arquetipo_Fit3 <-
+  brm(
+    data = datos_trans,
+    family = "categorical",
+    formula = Arquetipo_Mdl3,
+    chains = 4,
+    cores = 4,
+    warmup = 2500,
+    iter = 5000,
+    seed = 8807,
+    control = list(adapt_delta = 0.99, max_treedepth = 15),
+    file = here("Models/MujerBogotana_Arquetipo_Fit3.rds"),
+    file_refit = "never"
+  )
+```
+

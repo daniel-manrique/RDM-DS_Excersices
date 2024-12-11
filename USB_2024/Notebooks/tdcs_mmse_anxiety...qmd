@@ -1,0 +1,229 @@
+---
+title: "minimental_tdcs"
+format: html
+editor: visual
+---
+
+## 
+
+Regresión lineal de los datos para tres intervenciones no famacologicas tdcs tecnica de estimulación electrica trancraneal, minsdfulness es una tecnica basada en la meditación del aquí y el ahora y combinada es una tecnica dosnde se utilizaran las dos tecnicas juntas.
+
+##cargar el archivo de los datos crudos y llamar las librerias.
+
+## Instalación de paquetes
+
+A continuación se instalan los paquetes necesario para desarrollar el modelo.
+
+```{r}
+install.packages("scales")
+install.packages("ggplot2")
+install.packages("dplyr")
+install.packages("here")
+install.packages("patchwork")
+
+```
+
+En este apartado de llama a la tabla de los datos que han pasado por un proceso de limpieza.
+
+```{r}
+
+tdcs_mmse_anxiety <- read_xlsx (here("Data/INT_Anxiety_minimental.xlsx"))
+head(tdcs_mmse_anxiety)
+
+```
+
+A continuación se explorar la estructura de los datos
+
+```{r}
+str(tdcs_mmse_anxiety)
+```
+
+Transformar la tabla de datos con el fin de obtener las clases necesarias para ejecutar el mmodelo.
+
+```{r}
+library(dplyr)
+
+tdcs_mmse_anxiety <- tdcs_mmse_anxiety %>%
+  mutate(
+    # Set factor levels for Condition
+    Medicion = factor(Medicion, levels = c("1", "2","3", "4")),
+    Tdcs = factor(Tdcs, levels = c("0", "1")),
+    Intervencion = factor(Intervencion, levels = c("Mindfulness", "Tdcs","combinado")),
+    DS_Sexo = factor(DS_Sexo, levels = c("H", "M"))
+  )
+
+str(tdcs_mmse_anxiety)
+```
+
+Een este apartado se establecen estadisticos inciales
+
+```{r}
+summary(tdcs_mmse_anxiety)
+```
+
+Exploración visual de los datos, para esto se aplican los codigos de forma y color de las tablas.
+
+```{r}
+library(ggplot2)
+
+Plot_theme <- theme_classic() +
+  theme(
+      plot.title = element_text(size=18, hjust = 0.5, face="bold"),
+      plot.subtitle = element_text(size = 10, color = "black"),
+      plot.caption = element_text(size = 12, color = "black"),
+      axis.line = element_line(colour = "black", linewidth = 1.5, linetype = "solid"),
+      axis.ticks.length=unit(7,"pt"),
+     
+      axis.title.x = element_text(colour = "black", size = 16),
+      axis.text.x = element_text(colour = "black", size = 16, angle = 0, hjust = 0.5),
+      axis.ticks.x = element_line(colour = "black", linewidth = 1),
+      
+      axis.title.y = element_text(colour = "black", size = 16),
+      axis.text.y = element_text(colour = "black", size = 16),
+      axis.ticks.y = element_line(colour = "black", linewidth = 1),
+      
+      legend.position="right",
+      legend.direction="vertical",
+      legend.title = element_text(colour="black", face="bold", size=12),
+      legend.text = element_text(colour="black", size=10),
+      
+      plot.margin = margin(t = 10,  # Top margin
+                             r = 2,  # Right margin
+                             b = 10,  # Bottom margin
+                             l = 10) # Left margin
+      ) 
+```
+
+Se crea el código para los plots de las variables intervención y los resultados de la orientación
+
+```{r}
+library(ggplot2)
+# Grafico de orientación
+MMSE_orientacion<- ggplot(
+tdcs_mmse_anxiety,
+  aes(
+    x = Intervencion,
+    y = `MMSE_Orientación`,
+    color = Medicion
+  )
+) +
+  geom_point(position = position_jitter(width = 0.1)) +
+  geom_boxplot(width = 0.5, outlier.color = NA, fill = NA) +
+  labs(y = "Efecto")+
+  ggtitle("Intervención-Orientacion")+
+  Plot_theme
+
+ggsave( MMSE_orientacion,
+       filename = "orientacion_Fig.png",
+       width    = 12, 
+       height   = 10, 
+       units    = "cm")
+MMSE_orientacion
+```
+
+#Se crea el código para los plots de las variables intervención y los resultados de la recuerdo inmediato
+
+```{r}
+# Grafico MMSE_FyRinmediato
+ MMSE_FyRinmediato <- ggplot(
+  tdcs_mmse_anxiety,
+  aes(
+    x = Intervencion,
+    y = `MMSE_FyRinmediato`,
+    color = Medicion
+  )
+) +
+  geom_point(position = position_jitter(width = 0.1)) +
+  geom_boxplot(width = 0.5, outlier.color = NA, fill = NA) +
+  labs(y = "Efecto") +
+  ggtitle("Intervención-FYRinmediato")+
+  Plot_theme
+ggsave( MMSE_FyRinmediato,
+       filename = "FyRinmediato_Fig.png",
+       width    = 12, 
+       height   = 10, 
+       units    = "cm")
+MMSE_FyRinmediato
+```
+
+Se crea el código para los plots de las variables intervención y los resultados de atención y calculo
+
+```{r}
+# Grafico de MMSE_Atencion_Calculo
+ MMSE_Atencion_calculo <- ggplot(
+  tdcs_mmse_anxiety,
+  aes(
+    x = Intervencion,
+    y = `MMSE_Atencion_Calculo`,
+    color = Medicion
+  )
+) +
+  geom_point(position = position_jitter(width = 0.1)) +
+  geom_boxplot(width = 0.5, outlier.color = NA, fill = NA) +
+  labs(y = "Efecto") +
+  ggtitle("Intervención-Atención y Calculo")+
+  Plot_theme
+ggsave( MMSE_Atencion_calculo,
+       filename = "Atencion_Calculo_Fig.png",
+       width    = 12, 
+       height   = 10, 
+       units    = "cm")
+MMSE_Atencion_calculo
+```
+
+#Se crea el código para los plots de las variables intervención y los resultados de total del minimental.
+
+```{r}
+# Grafico de MMSE_Total
+MMSE_total <- ggplot(
+  tdcs_mmse_anxiety,
+  aes(
+    x = Intervencion,
+    y = `MMSE_total`,
+    color = Medicion
+  )
+) +
+  geom_point(position = position_jitter(width = 0.1)) +
+  geom_boxplot(width = 0.5, outlier.color = NA, fill = NA) +
+  labs(y = "Efecto") +
+  ggtitle("Intervención-Total")+
+  Plot_theme
+ggsave( MMSE_total,
+       filename = "Total_Fig.png",
+       width    = 12, 
+       height   = 10, 
+       units    = "cm")
+MMSE_total
+```
+
+Modelo estadistico regresión lineal. El modelo se establece desde la siguientes hipotesis: A mayor edad, menor desempeño en tareas cognitivas medidas por el minimental (MMSE).
+
+```{r}
+modelo <- lm(MMSE_total ~ DS_Edad, data = tdcs_mmse_anxiety)
+summary(modelo)
+plot(tdcs_mmse_anxiety$DS_Edad, tdcs_mmse_anxiety$MMSE_total, main = "Regresión Lineal",      xlab = "Edad", ylab = "MMSE TOTAL")
+abline(modelo, col = "blue")
+```
+
+## Tipo de intervención y resultados en tareas de MMSE total.
+
+```{r}
+plot(tdcs_mmse_anxiety$Intervencion, tdcs_mmse_anxiety $MMSE_total, main = "Regresión Lineal",      xlab = "MMSE_totaL", ylab = "Intervencion")
+abline(modelo, col = "blue")
+```
+
+##readme: Se puede observar que no existe correlaciones significativas entre las variables por lo tanto se comprueba la hipostesis nula, no obstante se obsevan algunos cambios entre las variable edad y el rendimiento total de la prueba cognitiva.
+
+##Interpretación de los resultados En el grafico se puede observar que el intercepto a los 31.2540 años es de 8.6291 y el coeficiente para MMSE es de 0.1944.
+
+Se realizo una evaluación neuropsicologica denominada MMSE la cual consiste en conocer el estado cognitivo general de una persona, posteriormente se desarrollo un modelo lineal para concer si exite relación entre la edad y el desempeño en la prueba, los resultados indican que a los 31.2540 años existe una progresión en el desempeño de la prueba, no obstante los resultados muestra un coeficiente de 0.1944 lo que indica que no hay una relación significativa entre la edad y el desempeño en la prueba cognitiva MMSE.
+
+```{r}
+modelo <- lm(MMSE_total ~0+ Medicion, data = tdcs_mmse_anxiety)
+summary(modelo)
+plot(y=tdcs_mmse_anxiety$MMSE_total,x=tdcs_mmse_anxiety $Medicion, main = "Regresión Lineal",      xlab = "MEDICION", ylab = "MMSE TOTAL")
+```
+
+Se realizó un modelo lineal, sin embargo, al comparar una variable numérica con una variable de factor se puede visibilizar 4 boxplot. Se puede observar que el coeficiente en la primera medición de los participantes es de 12.0500 con un error estándar de 0.5113, en la medición 2 se presenta un coeficiente en el desempeño de la prueba de 15,0500, en la medición 3 el coeficiente es 17.4500 y para la medición 4 es de 19.1500, todas las mediciones presentan el mismo error estándar de 0.5113.
+
+Se realizó un intervención no farmacológica y posteriormente se desarrollo una medición cognitiva durante 4 momentos con la prueba Minimental (MMSE), lo que se puede observar en la grafica es un aumento progresivo en el desempeño de la evaluación cognitiva observando un aumento de 2 puntos por medición, esto indica que la intervención no farmacológica puede aumentar el rendimiento cognitivo de los participantes. El rendimiento en la prueba es significativo ya que el desempeño en la tarea MMSE establece cambios en el rendimiento neuropsicológico.

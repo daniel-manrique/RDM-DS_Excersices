@@ -1,0 +1,261 @@
+---
+title: "ANALISIS_EPIDEMILOGICO_TNEURODESARROLLO"
+format: html
+Author:GLORIA ANDREA RICO VELASCO
+Date: 16/11/2024
+---
+
+## Titulo de investigacion: Características epidemiológicas y clínicas de los Trastornos del Neurodesarrollo en población infantil en el periodo 2016 al 2023
+
+Objetivo general de la investigación: Describir las características epidemiológicas de los trastornos del neurodesarrollo en población infantil en Colombia dar la  visivilizacion por cada y un analisis  predictivo entre el año  el diagnotico y la  cantidad  de  siagnostico para asi  ve la  prevelencia y la incidencia de la misma en colombia.
+
+NOTA: debes  descargar la  base llamada Ministerio_Datos_Limpios ya que pesa mas de lo esperado
+
+## Instalacion de paquetes
+
+Se inicia la instalacion de los paquetes correspondientes al analisis epidemiologio de los trastornos del neurodesarrollo
+
+```{r}
+# INSTALAR Y CARGAR LIBRERÍAS NECESARIAS
+
+if (!requireNamespace("dplyr", quietly = TRUE)) install.packages("dplyr")
+if (!requireNamespace("readxl", quietly = TRUE)) install.packages("readxl")
+if (!requireNamespace("ggplot2", quietly = TRUE)) install.packages("ggplot2")
+
+library(dplyr)
+library(readxl)
+library(ggplot2)
+library(here)
+
+```
+
+## Cargue de base de datos 
+
+Se   realiza  el cargue de la  base  desde  su ubicación actual en el equipo  se  definen las  columnas 
+```{r}
+##leer archivo excel
+
+Datos_Limpios_Analisis_Ministerio <- read_excel(here("Data/Ministerio_Datos_Limpios.xlsx"), 
+                                  col_types = c("numeric","numeric", "text", 
+                                                "text", "text", "text", "text", "numeric"))
+View(Datos_Limpios_Analisis_Ministerio)
+
+# Eliminar filas con valores NA en cualquier columna
+Datos_Limpios_Analisis_Ministerio <- na.omit(Datos_Limpios_Analisis_Ministerio)
+# Eliminar filas con NA en la columna Edades usando filter
+Datos_Limpios_Analisis_Ministerio <- Datos_Limpios_Analisis_Ministerio %>% filter(!is.na(Edades))
+
+```
+
+## Lectura y limpieza de dataset
+
+frente a la base del ministerio de salud llamada Datos_Limpios_Analisis_Ministerio se realiza una limpieza de los datos relacionados a datos perdidos como espacios vacios (en blanco), adicionalmente se limbia la columna edades para que solo quede de manera numerica y no con letras para que sea mas facil el procesamiento de los datos, ademas de ello se le pide a R que mantenga los años para analizar las prevalencias por año y diagnostico
+
+```{r}
+Datos_Limpios_Analisis_Ministerio <- Datos_Limpios_Analisis_Ministerio %>%
+  mutate(Año = as.numeric(Año))  # Asegura que 'Año' se mantiene numérico
+```
+
+##Definicion de la columna Diagnostico  de   encuentra en el readme file 
+F70 Retraso mental leve
+F71 Retraso mental moderado
+F72 Retraso mental grave
+F73 Retraso mental profundo
+F78 Otros tipos de retraso mental
+F79 Retraso mental, no especificado
+F80 Trastornos específicos del desarrollo del habla y del lenguaje 
+F80.0 Trastorno específico de la pronunciación Trastorno específico del desarrollo 
+F80.1 Trastorno del lenguaje expresivo
+F80.2 Trastorno de la recepción del lenguaje
+F80.3 Afasia adquirida con epilepsia 
+F80.8 Otros trastornos del desarrollo del habla y del lenguaje
+F80.9 Trastorno del desarrollo del habla y del lenguaje no especificado
+F81 Trastornos específicos del desarrollo de las habilidades escolares Son trastornos en los cuales se hallan
+F81.0 Trastorno específico de la lectura
+F81.1 Trastorno específico del deletreo [ortografía]
+F81.2 Trastorno específico de las habilidades aritméticas
+F81.3 Trastorno mixto de las habilidades escolares
+F81.8 Otros trastornos del desarrollo de las habilidades escolares
+F81.9 Trastorno del desarrollo de las habilidades escolares, no especificado
+F82x Trastorno específico del desarrollo de la función motriz
+F83 Trastornos específicos mixtos del desarrollo
+F84 Trastornos generalizados del desarrollo
+F84.0 Autismo en la niñez
+F84.1 Autismo atípico
+F84.2 Síndrome de Rett
+F84.3 Otro trastorno desintegrativo de la niñez
+F84.4 Trastorno hiperactivo asociado con retraso mental y movimientos estereotipados
+F84.5 Síndrome de Asperger
+F84.8 Otros trastornos generalizados del desarrollo
+F84.9 Trastorno generalizado del desarrollo no especificado
+F88 Otros trastornos del desarrollo psicológico Agnosia del desarrollo
+F89x Trastorno del desarrollo psicológico, no especificado
+F90 Trastornos hipercinéticos
+F90.0 Perturbación de la actividad y de la atención
+F90.1 Trastorno hipercinético de la conducta
+F90.8 Otros trastornos hipercinéticos
+F90.9 Trastorno hipercinético, no especificado
+
+se realiza limpieza especializada a edades porque la base original tenia datos combinados
+
+```{r}
+
+# Limpieza de la columna "Edades" para extraer solo los números
+Datos_Limpios_Analisis_Ministerio <- Datos_Limpios_Analisis_Ministerio %>%
+  mutate(Edades = as.numeric(gsub("De | años", "", Edades)))  # Extrae solo el número en la columna 'Edades'
+
+# Verifica el resultado de la limpieza inicial
+View(Datos_Limpios_Analisis_Ministerio)
+str(Datos_Limpios_Analisis_Ministerio)
+
+```
+## Modelo de regresion lineal
+
+El objetivo de este análisis es evaluar el efecto de las variables Año_cod (años codificados) y Diagnóstico (categoría de diagnóstico) sobre la variable dependiente cantidad_p, que representa la cantidad de casos reportados. Esto se plantea mediante un modelo de regresión lineal que incluye la interacción entre ambas variables: cantidad_p ~ Año_cod * Diagnostico, data = Datos_top_3. Los datos utilizados, denominados Datos_top_3, corresponden a los diagnósticos más prevalentes de trastornos del neurodesarrollo, limitados a los tres principales por su frecuencia. Este modelo tiene como propósito predecir la cantidad de casos por año y diagnóstico, identificar tendencias en la incidencia de estos trastornos a lo largo del tiempo y analizar si la relación entre los años y la cantidad de casos varía según el tipo de diagnóstico. Con esta información, se busca no solo comprender la evolución temporal de estos trastornos, sino también generar insumos útiles para la planificación y toma de decisiones en salud pública.
+
+```{r}
+library(dplyr)
+
+# Asegurarse de que la columna Diagnóstico sea un factor
+Datos_Limpios_Analisis_Ministerio$Diagnostico <- as.factor(Datos_Limpios_Analisis_Ministerio$Diagnostico)
+
+# 1. Filtrar los 3 diagnósticos más prevalentes
+top_3_diagnosticos <- Datos_Limpios_Analisis_Ministerio %>%
+  group_by(Diagnostico) %>%
+  summarise(total_diagnosticos = sum(cantidad_p, na.rm = TRUE)) %>%
+  arrange(desc(total_diagnosticos)) %>%
+  slice_head(n = 3) %>%
+  pull(Diagnostico)  # Extraer los 3 diagnósticos más prevalentes
+
+# Ver los diagnósticos más prevalentes
+print("Diagnósticos más prevalentes:")
+print(top_3_diagnosticos)
+
+# 2. Filtrar los datos para los 3 diagnósticos más prevalentes
+Datos_top_3 <- Datos_Limpios_Analisis_Ministerio %>%
+  filter(Diagnostico %in% top_3_diagnosticos)
+
+# Verifica si la tabla filtrada tiene datos
+print("Datos filtrados para los 3 diagnósticos más prevalentes:")
+print(head(Datos_top_3))
+
+# 3. Crear el modelo de regresión lineal
+modelo_incidencia <- lm(cantidad_p ~ Año_cod * Diagnostico, data = Datos_top_3)
+
+# 4. Resumen del modelo
+summary(modelo_incidencia)
+
+```
+Dentro de este modelo de regresión lineal, se analizan los tres diagnósticos más prevalentes de trastornos del neurodesarrollo (F808, F809 y F900) y los años comprendidos entre 2016 y 2022, los cuales han sido codificados para el análisis numérico del modelo como 0 a 6. El diagnóstico F808, el menos prevalente, presenta un promedio inicial de 3.86 casos y un incremento anual de 3.99 casos, según las predicciones del modelo. En el caso del diagnóstico F809, el promedio anual de casos es de 4.36, ubicándose como el segundo en aumento de casos en el período analizado. Por último, el diagnóstico F900, relacionado con el trastorno de perturbación de la actividad y la atención, se identifica como el más prevalente, con un promedio de 8.42 casos por año, siendo el que registra el mayor número de casos a lo largo del tiempo. Estos resultados reflejan la distribución y tendencia de estos diagnósticos, proporcionando una visión clara para entender su comportamiento y planificar estrategias en salud pública.
+
+La interacción entre Año_cod y el diagnóstico F900 tiene un efecto negativo significativo en el incremento anual de casos (-0.47). Esto sugiere que aunque inicialmente es el más prevalente, la tasa de aumento anual podría disminuir ligeramente con el tiempo.esto puede  indicar una disminucion en la  cantidad de  diagnosticos que se dieron durante y despues de pandemia ya que los servicios de salud estuvieron un poco limitados 
+
+##Data frame con predicciones basadas en el modelo y PLOT
+Se diseña 2 modelos de plot para  ver los resultados de este analisis 
+
+```{r}
+# Crear un data frame con predicciones basadas en el modelo
+datos_test <- Datos_top_3  # Usa el conjunto de datos que desees
+datos_test$Predicted_Response <- predict(modelo_incidencia, newdata = datos_test)
+
+# Crear el gráfico para comparar predicciones y valores reales
+library(ggplot2)
+
+ggplot(datos_test, aes(x = cantidad_p, y = Predicted_Response, color = Diagnostico)) +
+  geom_point(alpha = 0.6) +  # Puntos de dispersión
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +  # Línea de identidad
+  labs(
+    title = "Comparación entre Valores Reales y Predicciones",
+    x = "Valores Reales (cantidad_p)",
+    y = "Predicciones (Predicted_Response)",
+    color = "Diagnóstico"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold"),
+    axis.text = element_text(size = 10),
+    axis.title = element_text(size = 12)
+  )
+
+```
+
+```{r}
+library(ggeffects)
+
+predict_response(modelo_incidencia)
+```
+
+```{r}
+library(ggeffects)
+library(ggplot2)
+
+# Generar predicciones ajustadas según los términos del modelo
+predicciones <- ggpredict(modelo_incidencia, terms = c("Año_cod", "Diagnostico"))
+
+# Visualizar predicciones con ggplot2
+ggplot(predicciones, aes(x = x, y = predicted, color = group)) +
+  geom_point(size = 3) +  # Puntos exactos
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.2) +  # Barras de error
+  labs(
+    title = "Predicción de Diagnósticos por Año",
+    x = "Año",
+    y = "Cantidad Predicha",
+    color = "Diagnóstico"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(size = 14, face = "bold")
+  )
+
+
+```
+
+Interpretacion: title = "Predicción de Diagnósticos por Año",
+    x = "Año",y = "Cantidad Predicha",color = "Diagnóstico" en este plot  podremos visualizar el modelo de  regresion lineal  teniendo en cuenta el año denominado de 0 a 6  que va desde  el 2016 hasta el 2022  y la cantidad de prediccion en contraste  con los tres diagnosticos mas prevalentes 
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# 1. Limpiar y eliminar registros con Sexo "OTROS"
+Datos_Limpios_Analisis_Ministerio <- Datos_Limpios_Analisis_Ministerio %>%
+  mutate(Sexo = case_when(
+    Sexo == "MASCULINO" ~ "MASCULINO",
+    Sexo == "FEMENINO" ~ "FEMENINO",
+    TRUE ~ "OTROS"
+  )) %>%
+  filter(Sexo != "OTROS")  # Eliminar registros donde Sexo es "OTROS"
+
+# 2. Filtrar los diagnósticos más prevalentes
+top_3_diagnosticos <- Datos_Limpios_Analisis_Ministerio %>%
+  group_by(Diagnostico) %>%
+  summarise(total_diagnosticos = sum(cantidad_p, na.rm = TRUE)) %>%
+  arrange(desc(total_diagnosticos)) %>%
+  slice_head(n = 3) %>%
+  pull(Diagnostico)
+
+Datos_top_3 <- Datos_Limpios_Analisis_Ministerio %>%
+  filter(Diagnostico %in% top_3_diagnosticos)
+
+# 3. Modelo simplificado
+modelo_incidencia <- lm(cantidad_p ~ Año_cod + Diagnostico + Sexo + Año_cod:Diagnostico + Año_cod:Sexo, 
+                        data = Datos_top_3)
+summary(modelo_incidencia)
+
+# 4. Visualización
+ggplot(Datos_top_3, aes(x = Año_cod, y = cantidad_p, color = Diagnostico)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", se = FALSE) +
+  facet_wrap(~ Sexo) +
+  labs(
+    title = "Evolución de cantidad de casos por año y sexo",
+    x = "Año codificado",
+    y = "Cantidad de casos",
+    color = "Diagnóstico"
+  ) +
+  theme_minimal()
+
+
+```
+En este modelo, se analiza la interacción y el efecto entre las variables Año, cantidad de diagnósticos de trastornos del neurodesarrollo y sexo. Los resultados muestran que el intercepto corresponde al sexo femenino para el diagnóstico F808, con una predicción inicial de 2.55 casos. Además, se observa que, a lo largo de los años, la cantidad de casos varía según el diagnóstico. Para el diagnóstico F900, se estima un aumento promedio de 7.01 casos por año, lo que indica un incremento considerable en la prevalencia de este diagnóstico a lo largo del tiempo. Por otro lado, en el caso del sexo masculino, la probabilidad de diagnóstico es mayor, con un promedio de aumento de 4.7 casos por año. Esto sugiere que el diagnóstico F900 es más prevalente en hombres que en mujeres.
